@@ -1,2 +1,2 @@
-export const PLUGIN_ID = 'queryCopilot';
-export const PLUGIN_NAME = 'query_copilot';
+export * from './constants';
+export type * from './types';
