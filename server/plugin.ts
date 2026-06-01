@@ -164,6 +164,7 @@ export class QueryCopilotPlugin
       logger: loggerService,
       metrics: metricsService,
       router: providerRouter,
+      cacheService,
       createPipeline,
     };
 

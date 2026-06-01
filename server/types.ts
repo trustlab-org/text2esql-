@@ -5,6 +5,7 @@ import type { MetricsService } from './services/observability/metrics.service';
 import type { ConfigService } from './services/config/config.service';
 import type { ProviderRouter } from './services/providers/router/provider.router';
 import type { QueryPipeline } from './services/query/query.pipeline';
+import type { CacheService } from './services/cache/cache.service';
 
 // ---------------------------------------------------------------------------
 // Plugin dependency contracts
@@ -36,6 +37,8 @@ export interface QueryCopilotContext {
   readonly logger: LoggerService;
   readonly metrics: MetricsService;
   readonly router: ProviderRouter;
+  /** Redis-backed result cache; used by the health route to report Redis status. */
+  readonly cacheService: CacheService;
   /**
    * Builds a {@link QueryPipeline} bound to a request-scoped Elasticsearch
    * client. Invoked per request so index-mapping reads honour the caller's
