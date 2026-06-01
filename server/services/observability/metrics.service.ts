@@ -21,6 +21,7 @@ export interface MetricsSummary {
   readonly validationFailures: number;
   readonly correctionAttempts: number;
   readonly avgLatencyMs: number;
+  readonly estimatedTotalCostUsd: number;
   readonly providerCallCounts: Readonly<Record<ProviderName, ProviderCallMetrics>>;
   readonly uptimeMs: number;
   readonly snapshotAt: string; // ISO 8601
@@ -83,6 +84,9 @@ export class MetricsService {
   private totalCompletedRequests = 0;
   private totalLatencyMs = 0;
 
+  // Accumulated estimated cost across completed runs
+  private totalCostUsd = 0;
+
   // Per-provider breakdown
   private readonly providerMetrics: Record<ProviderName, MutableProviderMetrics> =
     initialProviderMap();
@@ -105,6 +109,9 @@ export class MetricsService {
         if (payload.totalDurationMs !== undefined) {
           this.totalCompletedRequests += 1;
           this.totalLatencyMs += payload.totalDurationMs;
+        }
+        if (typeof payload.costUsd === 'number') {
+          this.totalCostUsd += payload.costUsd;
         }
         break;
 
@@ -190,6 +197,7 @@ export class MetricsService {
       validationFailures: this.validationFailures,
       correctionAttempts: this.correctionAttempts,
       avgLatencyMs,
+      estimatedTotalCostUsd: Math.round(this.totalCostUsd * 1e6) / 1e6,
       providerCallCounts: Object.freeze(providerCallCounts),
       uptimeMs: Date.now() - this.startedAt,
       snapshotAt: new Date().toISOString(),
@@ -209,6 +217,7 @@ export class MetricsService {
     this.correctionAttempts = 0;
     this.totalCompletedRequests = 0;
     this.totalLatencyMs = 0;
+    this.totalCostUsd = 0;
 
     for (const key of Object.keys(this.providerMetrics) as ProviderName[]) {
       this.providerMetrics[key] = emptyProviderMetrics();

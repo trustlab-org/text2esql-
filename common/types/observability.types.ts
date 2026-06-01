@@ -95,6 +95,8 @@ export interface PipelineEventPayload {
   readonly totalDurationMs?: number;
   readonly stagesCompleted?: readonly string[];
   readonly abortReason?: string;
+  /** Estimated USD cost of the run; accumulated by MetricsService on pipeline_complete. */
+  readonly costUsd?: number;
 }
 
 export interface IntentClassifiedPayload {

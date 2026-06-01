@@ -1,6 +1,7 @@
 import type { IRouter } from '@kbn/core/server';
 import type { QueryCopilotContext } from '../types';
 import { registerHealthRoutes } from './health.routes';
+import { registerMetricsRoutes } from './metrics.routes';
 import { registerProviderRoutes } from './provider.routes';
 import { registerQueryRoutes } from './query.routes';
 
@@ -13,6 +14,7 @@ import { registerQueryRoutes } from './query.routes';
  */
 export function defineRoutes(router: IRouter, context: QueryCopilotContext): void {
   registerHealthRoutes(router, context);
+  registerMetricsRoutes(router, context);
   registerProviderRoutes(router, context);
   registerQueryRoutes(router, context);
 }

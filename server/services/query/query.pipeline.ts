@@ -134,6 +134,32 @@ export class QueryPipeline {
 
     this.logger.logRequest(requestId, 'POST', '/api/query_copilot/generate');
 
+    // Emits an observability event to MetricsService; best-effort, never throws.
+    const emitMetric = (
+      type: ObservabilityEvent['type'],
+      payload: ObservabilityEvent['payload'],
+      severity: ObservabilityEvent['severity'] = ERROR_SEVERITY.INFO
+    ): void => {
+      try {
+        this.metrics.recordEvent({
+          eventId: randomUUID(),
+          type,
+          pipelineId,
+          sessionId: request.sessionId,
+          timestamp: new Date().toISOString(),
+          durationMs: ctx.getElapsedMs(),
+          severity,
+          provider: ctx.currentProvider,
+          stage: null,
+          payload,
+          tags: [],
+        });
+      } catch {
+        // Metrics must never break the pipeline.
+      }
+    };
+    emitMetric(OBSERVABILITY_EVENT_TYPES.PIPELINE_START, { kind: 'pipeline_start' });
+
     try {
       // ── 1. Normalize ──────────────────────────────────────────────────
       const tNormalize = Date.now();
@@ -155,13 +181,14 @@ export class QueryPipeline {
       if (cached) {
         ctx.cacheHit = true;
         this.logger.logCacheEvent(requestId, true, cacheKey);
+        emitMetric(OBSERVABILITY_EVENT_TYPES.CACHE_HIT, { kind: 'cache_hit', keyHash: cacheKey });
         ctx.addStage({
           stage: 'cache_lookup',
           durationMs: Date.now() - tCacheGet,
           success: true,
           metadata: { hit: true },
         });
-        this.recordCompletion(ctx, request, pipelineId);
+        this.recordCompletion(ctx, request, pipelineId, cached.costEstimate.totalCostUsd);
         // Return the cached result with this run's identity and timing.
         return {
           ...cached,
@@ -172,6 +199,7 @@ export class QueryPipeline {
         };
       }
       this.logger.logCacheEvent(requestId, false, cacheKey);
+      emitMetric(OBSERVABILITY_EVENT_TYPES.CACHE_MISS, { kind: 'cache_miss', keyHash: cacheKey });
       ctx.addStage({
         stage: 'cache_lookup',
         durationMs: Date.now() - tCacheGet,
@@ -226,6 +254,17 @@ export class QueryPipeline {
       } catch (routeError) {
         ctx.addStage({ stage: 'route', durationMs: Date.now() - tRoute, success: false });
         this.logger.logError(requestId, routeError, { stage: 'route' });
+        emitMetric(
+          OBSERVABILITY_EVENT_TYPES.PROVIDER_ERROR,
+          {
+            kind: 'provider_error',
+            provider: request.preferredProvider ?? PROVIDER_NAMES.OPENAI,
+            errorCode: ERROR_CODES.PROVIDER_UNREACHABLE,
+            statusCode: null,
+            retryable: true,
+          },
+          ERROR_SEVERITY.ERROR
+        );
         return this.buildFailureResult({
           pipelineId,
           analystQuery,
@@ -263,6 +302,16 @@ export class QueryPipeline {
         response.tokensUsed.totalTokens,
         true
       );
+      emitMetric(OBSERVABILITY_EVENT_TYPES.PROVIDER_RESPONSE, {
+        kind: 'provider_response',
+        provider: response.provider,
+        model: '',
+        promptTokens: response.tokensUsed.promptTokens,
+        completionTokens: response.tokensUsed.completionTokens,
+        latencyMs: response.latencyMs,
+        cached: false,
+        finishReason: 'stop',
+      });
 
       // ── 7. Parse response JSON ────────────────────────────────────────
       const tParse = Date.now();
@@ -301,7 +350,21 @@ export class QueryPipeline {
           success: correction.succeeded,
           metadata: { attempts: correction.attempts.length, succeeded: correction.succeeded },
         });
+        emitMetric(OBSERVABILITY_EVENT_TYPES.QUERY_CORRECTED, {
+          kind: 'query_corrected',
+          attemptNumber: correction.attempts.length,
+          succeeded: correction.succeeded,
+          errorsAddressed: correction.attempts.length,
+        });
       }
+
+      emitMetric(OBSERVABILITY_EVENT_TYPES.QUERY_VALIDATED, {
+        kind: 'query_validated',
+        isValid: validation.valid,
+        errorCount: validation.syntaxErrors.length + validation.fieldErrors.length,
+        warningCount: validation.warnings.length,
+        validationDurationMs,
+      });
 
       // ── 10. Estimate tokens & cost ────────────────────────────────────
       const tEstimate = Date.now();
@@ -367,7 +430,7 @@ export class QueryPipeline {
       }
 
       // ── 13. Metrics + completion log ──────────────────────────────────
-      this.recordCompletion(ctx, request, pipelineId);
+      this.recordCompletion(ctx, request, pipelineId, costEstimate.totalCostUsd);
       this.logger.logPipelineStage(requestId, 'pipeline_complete', ctx.getElapsedMs(), {
         status,
         stages: ctx.stages.length,
@@ -645,11 +708,12 @@ export class QueryPipeline {
     }
   }
 
-  /** Records a pipeline-completion metrics event. Best-effort: never throws. */
+  /** Records a pipeline-completion metrics event (incl. run cost). Best-effort: never throws. */
   private recordCompletion(
     ctx: PipelineContext,
     request: QueryGenerationRequest,
-    pipelineId: string
+    pipelineId: string,
+    costUsd: number
   ): void {
     try {
       const event: ObservabilityEvent = {
@@ -666,6 +730,7 @@ export class QueryPipeline {
           kind: 'pipeline_complete',
           totalDurationMs: ctx.getElapsedMs(),
           stagesCompleted: ctx.stages.map((s) => s.stage),
+          costUsd,
         },
         tags: [],
       };
