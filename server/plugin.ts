@@ -26,6 +26,8 @@ import {
   OllamaProvider,
   AnthropicProvider,
   OpenAIProvider,
+  TokenEstimatorService,
+  CostEstimatorService,
 } from './services';
 import type { ILLMProvider } from './services';
 import type { ProviderName } from '../common';
@@ -38,6 +40,15 @@ import type {
   AnthropicConfig,
   OpenAIConfig,
 } from './services';
+import { CacheService, RedisClientFactory } from './services/cache';
+import { QueryNormalizer, IntentExtractorService } from './services/intent';
+import { ESMappingFetcher, ECSContextMapper } from './services/schema';
+import { PromptBuilder } from './services/prompt';
+import { KQLValidatorService } from './services/validation';
+import { CorrectionEngine, CorrectionPromptBuilder } from './services/correction';
+import { QueryPipeline } from './services/query';
+import type { ElasticsearchClient } from '@kbn/core/server';
+import type Redis from 'ioredis';
 
 export class QueryCopilotPlugin
   implements Plugin<
@@ -51,6 +62,7 @@ export class QueryCopilotPlugin
   private readonly initializerContext: PluginInitializerContext;
   private configService!: ConfigService;
   private healthMonitor!: HealthMonitor;
+  private redisClient?: Redis;
 
   constructor(initializerContext: PluginInitializerContext) {
     this.initializerContext = initializerContext;
@@ -104,12 +116,55 @@ export class QueryCopilotPlugin
       loggerService
     );
 
+    // ── Pipeline collaborators (shared singletons) ─────────────────────────────
+    const redisClient = new RedisClientFactory(this.logger.get('redis')).createClient(
+      this.configService.getRedisConfig()
+    );
+    this.redisClient = redisClient;
+    const cacheService = new CacheService(redisClient, this.configService, loggerService);
+    const normalizer = new QueryNormalizer();
+    const intentExtractor = new IntentExtractorService();
+    const ecsMapper = new ECSContextMapper();
+    const promptBuilder = new PromptBuilder();
+    const validator = new KQLValidatorService();
+    const correctionEngine = new CorrectionEngine(
+      new CorrectionPromptBuilder(),
+      providerRouter,
+      validator,
+      loggerService,
+      this.configService.getMaxCorrectionRetries()
+    );
+    const tokenEstimator = new TokenEstimatorService();
+    const costEstimator = new CostEstimatorService();
+    const esMappingLogger = this.logger.get('schema');
+
+    // A QueryPipeline is built per request, bound to the request-scoped ES client
+    // (so index-mapping reads honour the requesting user's permissions). The other
+    // collaborators above are stateless singletons created once here.
+    const createPipeline = (esClient: ElasticsearchClient): QueryPipeline =>
+      new QueryPipeline(
+        cacheService,
+        normalizer,
+        intentExtractor,
+        new ESMappingFetcher(esClient, esMappingLogger),
+        ecsMapper,
+        promptBuilder,
+        providerRouter,
+        validator,
+        correctionEngine,
+        tokenEstimator,
+        costEstimator,
+        loggerService,
+        metricsService
+      );
+
     // ── Plugin context ────────────────────────────────────────────────────────
     const pluginContext: QueryCopilotContext = {
       config: this.configService,
       logger: loggerService,
       metrics: metricsService,
       router: providerRouter,
+      createPipeline,
     };
 
     // ── Routes ────────────────────────────────────────────────────────────────
@@ -133,6 +188,9 @@ export class QueryCopilotPlugin
     this.logger.info('queryCopilot: stop');
     if (this.healthMonitor) {
       this.healthMonitor.stop();
+    }
+    if (this.redisClient) {
+      this.redisClient.disconnect();
     }
   }
 

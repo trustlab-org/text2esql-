@@ -1,8 +1,10 @@
+import type { ElasticsearchClient } from '@kbn/core/server';
 import type { NavigationServerPluginSetup } from '@kbn/navigation-plugin/server';
 import type { LoggerService } from './services/observability/logger.service';
 import type { MetricsService } from './services/observability/metrics.service';
 import type { ConfigService } from './services/config/config.service';
 import type { ProviderRouter } from './services/providers/router/provider.router';
+import type { QueryPipeline } from './services/query/query.pipeline';
 
 // ---------------------------------------------------------------------------
 // Plugin dependency contracts
@@ -34,4 +36,10 @@ export interface QueryCopilotContext {
   readonly logger: LoggerService;
   readonly metrics: MetricsService;
   readonly router: ProviderRouter;
+  /**
+   * Builds a {@link QueryPipeline} bound to a request-scoped Elasticsearch
+   * client. Invoked per request so index-mapping reads honour the caller's
+   * permissions; all other collaborators are shared singletons.
+   */
+  readonly createPipeline: (esClient: ElasticsearchClient) => QueryPipeline;
 }
