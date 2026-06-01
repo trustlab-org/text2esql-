@@ -5,6 +5,9 @@ export { ProviderNotEnabledError, ProviderApiKeyMissingError } from './config';
 export { LoggerService, MetricsService } from './observability';
 export type { MetricsSummary, ProviderCallMetrics } from './observability';
 
+export { TokenEstimatorService } from './token';
+export type { ProviderTokenEstimate, TokenEstimationMethod } from './token';
+
 export { BaseProvider } from './providers';
 export type { ILLMProvider, ProviderPrompt, ProviderResponse, ProviderMetadata, ProviderRole } from './providers';
 export {
