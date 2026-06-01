@@ -17,3 +17,29 @@ export {
   isProviderError,
   isRetryableProviderError,
 } from './providers';
+export {
+  ProviderRouter,
+  HealthMonitor,
+  PriorityRoutingStrategy,
+} from './providers';
+export type {
+  ProviderRoutingState,
+  HealthMonitorConfig,
+  IRoutingStrategy,
+  ProviderHealthState,
+} from './providers';
+
+export {
+  GeminiProvider,
+  GroqProvider,
+  OllamaProvider,
+  AnthropicProvider,
+  OpenAIProvider,
+} from './providers';
+export type {
+  GeminiConfig,
+  GroqConfig,
+  OllamaConfig,
+  AnthropicConfig,
+  OpenAIConfig,
+} from './providers';

@@ -2,6 +2,7 @@ import type { NavigationServerPluginSetup } from '@kbn/navigation-plugin/server'
 import type { LoggerService } from './services/observability/logger.service';
 import type { MetricsService } from './services/observability/metrics.service';
 import type { ConfigService } from './services/config/config.service';
+import type { ProviderRouter } from './services/providers/router/provider.router';
 
 // ---------------------------------------------------------------------------
 // Plugin dependency contracts
@@ -26,11 +27,11 @@ export interface QueryCopilotPluginStart {}
 
 // ---------------------------------------------------------------------------
 // Plugin context — passed to route handlers and downstream services
-// Assembles all instantiated services into a single typed accessor.
 // ---------------------------------------------------------------------------
 
 export interface QueryCopilotContext {
   readonly config: ConfigService;
   readonly logger: LoggerService;
   readonly metrics: MetricsService;
+  readonly router: ProviderRouter;
 }
