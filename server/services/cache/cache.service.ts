@@ -1,99 +1,73 @@
 /**
- * In-memory cache for the query pipeline.
+ * Redis-backed cache for the query pipeline.
  *
- * Provides a generic, dependency-free cache with two bounding strategies:
- *  - Time-to-live (TTL) expiry: entries older than the configured TTL are
- *    treated as misses and deleted lazily on access.
- *  - Bounded size: when the number of entries exceeds the configured maximum,
- *    the oldest entry (by insertion order) is evicted on the next write.
+ * Stores {@link QueryPipelineResult} values as JSON strings in Redis, keyed by
+ * a caller-supplied cache key (typically a normalized-query hash). Values are
+ * written with a TTL so stale results expire automatically.
  *
- * Intended use is caching generation results keyed by a normalized-query
- * SHA-256 hash, but the implementation is fully generic and makes no
- * assumptions about key or value shape beyond `string` keys.
- *
- * Note: this relies on the fact that a JS `Map` preserves insertion order,
- * which gives an approximate "oldest-first" (LRU-ish) eviction policy. Reads
- * (`get`) intentionally do NOT reorder entries, keeping behavior simple and
- * predictable.
+ * The service is designed to degrade gracefully: Redis is treated as a best-
+ * effort accelerator, never a hard dependency. When the connection is not in
+ * its `'ready'` state, or when any Redis/serialization error occurs, reads
+ * return `null` (a cache miss) and writes silently do nothing. No method on
+ * this service ever throws — unexpected errors are logged via
+ * {@link LoggerService.logError} and then swallowed so the calling pipeline can
+ * proceed against the source of truth.
  */
 
-export interface CacheServiceOptions {
-  /** Time-to-live for entries, in milliseconds. Default 300000 (5 min). */
-  readonly ttlMs?: number;
-  /** Maximum number of entries; when exceeded the oldest is evicted. Default 1000. */
-  readonly maxEntries?: number;
-}
+import type Redis from 'ioredis';
+import type { QueryPipelineResult } from '../../../common/types';
+import type { ConfigService } from '../config';
+import type { LoggerService } from '../observability';
 
-export interface CacheServiceStats {
-  readonly size: number;
-  readonly hits: number;
-  readonly misses: number;
-}
+/**
+ * Caches query pipeline results in Redis with graceful degradation.
+ *
+ * All operations are non-throwing: on an unavailable connection or any runtime
+ * error, reads behave as misses and writes are skipped.
+ */
+export class CacheService {
+  private readonly defaultTtlSeconds: number;
 
-export class CacheService<T = unknown> {
-  private readonly store = new Map<string, { value: T; expiresAt: number }>();
-  private hits = 0;
-  private misses = 0;
-  private readonly ttlMs: number;
-  private readonly maxEntries: number;
-
-  constructor(options?: CacheServiceOptions) {
-    this.ttlMs = options?.ttlMs ?? 300000;
-    this.maxEntries = options?.maxEntries ?? 1000;
+  constructor(
+    private readonly redis: Redis,
+    private readonly config: ConfigService,
+    private readonly logger: LoggerService
+  ) {
+    this.defaultTtlSeconds = this.config.getRedisConfig().ttl;
   }
 
-  /** Returns the cached value, or undefined on a miss or if the entry has expired (expired entries are deleted lazily). */
-  async get(key: string): Promise<T | undefined> {
-    const entry = this.store.get(key);
-    if (entry === undefined) {
-      this.misses++;
-      return undefined;
+  /** Returns the cached result, or null on miss / unavailable / any error. Deserializes JSON. */
+  async get(key: string): Promise<QueryPipelineResult | null> {
+    if (!this.isAvailable()) {
+      return null;
     }
-    if (Date.now() > entry.expiresAt) {
-      this.store.delete(key);
-      this.misses++;
-      return undefined;
-    }
-    this.hits++;
-    return entry.value;
-  }
-
-  /** Stores a value under the key with the configured TTL, evicting the oldest entry if over capacity. */
-  async set(key: string, value: T): Promise<void> {
-    if (!this.store.has(key) && this.store.size >= this.maxEntries) {
-      const oldest = this.store.keys().next().value;
-      if (oldest !== undefined) {
-        this.store.delete(oldest);
+    try {
+      const raw = await this.redis.get(key);
+      if (raw === null) {
+        return null;
       }
+      return JSON.parse(raw) as QueryPipelineResult;
+    } catch (error) {
+      this.logger.logError('cache', error, { operation: 'get', key });
+      return null;
     }
-    this.store.set(key, { value, expiresAt: Date.now() + this.ttlMs });
   }
 
-  /** True if a non-expired entry exists for the key. */
-  async has(key: string): Promise<boolean> {
-    const entry = this.store.get(key);
-    if (entry === undefined) {
-      return false;
+  /** Serializes the result to JSON and stores it with a TTL. Silently skips when unavailable. */
+  async set(key: string, result: QueryPipelineResult, ttlSeconds?: number): Promise<void> {
+    if (!this.isAvailable()) {
+      return;
     }
-    if (Date.now() > entry.expiresAt) {
-      this.store.delete(key);
-      return false;
+    try {
+      const ttl = ttlSeconds ?? this.defaultTtlSeconds;
+      await this.redis.set(key, JSON.stringify(result), 'EX', ttl);
+    } catch (error) {
+      this.logger.logError('cache', error, { operation: 'set', key });
     }
-    return true;
   }
 
-  /** Deletes an entry; returns true if one was removed. */
-  delete(key: string): boolean {
-    return this.store.delete(key);
-  }
-
-  /** Removes all entries. */
-  clear(): void {
-    this.store.clear();
-  }
-
-  /** Returns a snapshot of cache stats. */
-  getStats(): CacheServiceStats {
-    return { size: this.store.size, hits: this.hits, misses: this.misses };
+  /** True only when the Redis connection is ready to serve commands. */
+  isAvailable(): boolean {
+    return this.redis.status === 'ready';
   }
 }

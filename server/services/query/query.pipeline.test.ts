@@ -144,7 +144,7 @@ type Mocks = ReturnType<typeof makeMocks>;
 
 function makePipeline(m: Mocks): QueryPipeline {
   return new QueryPipeline(
-    m.cache as unknown as CacheService<QueryPipelineResult>,
+    m.cache as unknown as CacheService,
     m.normalizer as unknown as QueryNormalizer,
     m.intentExtractor as unknown as IntentExtractorService,
     m.esMappingFetcher as unknown as ESMappingFetcher,
@@ -227,7 +227,7 @@ describe('QueryPipeline', () => {
     expect(m.intentExtractor.extract).not.toHaveBeenCalled();
     expect(m.providerRouter.route).not.toHaveBeenCalled();
     expect(m.cache.set).not.toHaveBeenCalled();
-    expect(m.logger.logCacheEvent).toHaveBeenCalledWith(expect.any(String), true, normalized.cacheKey);
+    expect(m.logger.logCacheEvent).toHaveBeenCalledWith(expect.any(String), true, expect.any(String));
   });
 
   it('corrects an invalid query and reports corrected status', async () => {

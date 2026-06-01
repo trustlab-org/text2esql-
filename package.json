@@ -14,6 +14,7 @@
     "@google/generative-ai": "^0.24.1",
     "@kbn/es-query": "link:../../src/platform/packages/shared/kbn-es-query",
     "groq-sdk": "^1.2.1",
+    "ioredis": "^5.11.0",
     "js-tiktoken": "^1.0.21"
   }
 }

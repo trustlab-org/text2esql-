@@ -51,7 +51,7 @@ import type {
 import { PipelineContext } from './pipeline.context';
 import { SYSTEM_PROMPT_VERSION } from '../prompt';
 
-import type { CacheService } from '../cache';
+import { CacheKeyBuilder, type CacheService } from '../cache';
 import type { QueryNormalizer, IntentExtractorService, NormalizedQuery } from '../intent';
 import type { ESMappingFetcher, ECSContextMapper } from '../schema';
 import type { PromptBuilder } from '../prompt';
@@ -92,8 +92,10 @@ export interface QueryGenerationRequest {
  * injected; the pipeline is otherwise stateless across calls.
  */
 export class QueryPipeline {
+  private readonly cacheKeyBuilder = new CacheKeyBuilder();
+
   constructor(
-    private readonly cache: CacheService<QueryPipelineResult>,
+    private readonly cache: CacheService,
     private readonly normalizer: QueryNormalizer,
     private readonly intentExtractor: IntentExtractorService,
     private readonly esMappingFetcher: ESMappingFetcher,
@@ -146,11 +148,13 @@ export class QueryPipeline {
       ctx.addStage({ stage: 'normalize', durationMs: Date.now() - tNormalize, success: true });
 
       // ── 2. Cache lookup ───────────────────────────────────────────────
+      // Index-scoped, collision-resistant cache key (query hash + index pattern).
+      const cacheKey = this.cacheKeyBuilder.buildKey(normalized.cacheKey, request.indexPattern);
       const tCacheGet = Date.now();
-      const cached = await this.cache.get(normalized.cacheKey);
+      const cached = await this.cache.get(cacheKey);
       if (cached) {
         ctx.cacheHit = true;
-        this.logger.logCacheEvent(requestId, true, normalized.cacheKey);
+        this.logger.logCacheEvent(requestId, true, cacheKey);
         ctx.addStage({
           stage: 'cache_lookup',
           durationMs: Date.now() - tCacheGet,
@@ -167,7 +171,7 @@ export class QueryPipeline {
           totalDurationMs: ctx.getElapsedMs(),
         };
       }
-      this.logger.logCacheEvent(requestId, false, normalized.cacheKey);
+      this.logger.logCacheEvent(requestId, false, cacheKey);
       ctx.addStage({
         stage: 'cache_lookup',
         durationMs: Date.now() - tCacheGet,
@@ -358,7 +362,7 @@ export class QueryPipeline {
       // ── 12. Cache write (successful results only) ─────────────────────
       if (status !== 'failed') {
         const tCacheSet = Date.now();
-        await this.cache.set(normalized.cacheKey, result);
+        await this.cache.set(cacheKey, result);
         ctx.addStage({ stage: 'cache_write', durationMs: Date.now() - tCacheSet, success: true });
       }
 

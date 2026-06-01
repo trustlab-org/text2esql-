@@ -1,74 +1,142 @@
 import { CacheService } from './cache.service';
+import type Redis from 'ioredis';
+import type { ConfigService } from '../config';
+import type { LoggerService } from '../observability';
+import type { QueryPipelineResult } from '../../../common/types';
+
+const result = { pipelineId: 'p1', status: 'succeeded' } as unknown as QueryPipelineResult;
+
+function makeRedis(status = 'ready') {
+  return { status, get: jest.fn(), set: jest.fn().mockResolvedValue('OK') };
+}
+
+function makeConfig() {
+  return {
+    getRedisConfig: jest.fn().mockReturnValue({ host: 'h', port: 6379, ttl: 300 }),
+    isCacheEnabled: jest.fn().mockReturnValue(true),
+  };
+}
+
+function makeLogger() {
+  return {
+    logError: jest.fn(),
+    logRequest: jest.fn(),
+    logPipelineStage: jest.fn(),
+    logProviderCall: jest.fn(),
+    logCacheEvent: jest.fn(),
+  };
+}
+
+function makeService(redis: ReturnType<typeof makeRedis>, logger = makeLogger()) {
+  return {
+    svc: new CacheService(
+      redis as unknown as Redis,
+      makeConfig() as unknown as ConfigService,
+      logger as unknown as LoggerService
+    ),
+    logger,
+  };
+}
 
 describe('CacheService', () => {
-  it('set then get returns the value', async () => {
-    const c = new CacheService<string>();
-    await c.set('k', 'v');
-    expect(await c.get('k')).toBe('v');
+  describe('get', () => {
+    it('returns the deserialized result on a cache hit', async () => {
+      const redis = makeRedis();
+      redis.get.mockResolvedValue(JSON.stringify(result));
+      const { svc } = makeService(redis);
+
+      const got = await svc.get('k');
+
+      expect(got).toEqual(result);
+      expect(got?.pipelineId).toBe('p1');
+    });
+
+    it('returns null on a cache miss', async () => {
+      const redis = makeRedis();
+      redis.get.mockResolvedValue(null);
+      const { svc } = makeService(redis);
+
+      expect(await svc.get('k')).toBeNull();
+    });
+
+    it('returns null without calling redis when unavailable', async () => {
+      const redis = makeRedis('connecting');
+      const { svc } = makeService(redis);
+
+      expect(await svc.get('k')).toBeNull();
+      expect(redis.get).not.toHaveBeenCalled();
+    });
+
+    it('returns null and logs on a redis error', async () => {
+      const redis = makeRedis();
+      redis.get.mockRejectedValue(new Error('boom'));
+      const { svc, logger } = makeService(redis);
+
+      expect(await svc.get('k')).toBeNull();
+      expect(logger.logError).toHaveBeenCalled();
+    });
+
+    it('returns null and logs on invalid JSON', async () => {
+      const redis = makeRedis();
+      redis.get.mockResolvedValue('not-json{');
+      const { svc, logger } = makeService(redis);
+
+      expect(await svc.get('k')).toBeNull();
+      expect(logger.logError).toHaveBeenCalled();
+    });
   });
 
-  it('miss returns undefined', async () => {
-    const c = new CacheService<string>();
-    expect(await c.get('absent')).toBeUndefined();
+  describe('set', () => {
+    it('stores using the default ttl', async () => {
+      const redis = makeRedis();
+      const { svc } = makeService(redis);
+
+      await svc.set('k', result);
+
+      expect(redis.set).toHaveBeenCalledWith('k', JSON.stringify(result), 'EX', 300);
+    });
+
+    it('stores using an explicit ttl', async () => {
+      const redis = makeRedis();
+      const { svc } = makeService(redis);
+
+      await svc.set('k', result, 60);
+
+      expect(redis.set).toHaveBeenCalledWith('k', expect.any(String), 'EX', 60);
+    });
+
+    it('does not call redis when unavailable', async () => {
+      const redis = makeRedis('connecting');
+      const { svc } = makeService(redis);
+
+      await expect(svc.set('k', result)).resolves.toBeUndefined();
+      expect(redis.set).not.toHaveBeenCalled();
+    });
+
+    it('resolves without throwing and logs on a redis error', async () => {
+      const redis = makeRedis();
+      redis.set.mockRejectedValue(new Error('down'));
+      const { svc, logger } = makeService(redis);
+
+      await expect(svc.set('k', result)).resolves.toBeUndefined();
+      expect(logger.logError).toHaveBeenCalled();
+    });
   });
 
-  it('expires entries past their TTL', async () => {
-    // ttlMs: -1 makes expiresAt strictly less than Date.now(), so the entry
-    // is always considered expired on the next access. This is deterministic
-    // and needs no timers.
-    const c = new CacheService<number>({ ttlMs: -1 });
-    await c.set('k', 1);
-    const before = c.getStats().misses;
-    expect(await c.get('k')).toBeUndefined();
-    expect(c.getStats().misses).toBe(before + 1);
-  });
+  describe('isAvailable', () => {
+    it('is true when status is ready', () => {
+      const { svc } = makeService(makeRedis('ready'));
+      expect(svc.isAvailable()).toBe(true);
+    });
 
-  it('reports presence via has without affecting hit/miss counters', async () => {
-    const c = new CacheService<string>();
-    await c.set('k', 'v');
+    it('is false when status is connecting', () => {
+      const { svc } = makeService(makeRedis('connecting'));
+      expect(svc.isAvailable()).toBe(false);
+    });
 
-    const before = c.getStats();
-    expect(await c.has('k')).toBe(true);
-    expect(await c.has('absent')).toBe(false);
-    const after = c.getStats();
-
-    expect(after.hits).toBe(before.hits);
-    expect(after.misses).toBe(before.misses);
-  });
-
-  it('evicts the oldest entry when over capacity', async () => {
-    const c = new CacheService<number>({ maxEntries: 2 });
-    await c.set('k1', 1);
-    await c.set('k2', 2);
-    await c.set('k3', 3);
-
-    expect(await c.has('k1')).toBe(false);
-    expect(await c.has('k2')).toBe(true);
-    expect(await c.has('k3')).toBe(true);
-    expect(c.getStats().size).toBe(2);
-  });
-
-  it('supports delete and clear', async () => {
-    const c = new CacheService<string>();
-    await c.set('k', 'v');
-
-    expect(c.delete('k')).toBe(true);
-    expect(await c.has('k')).toBe(false);
-
-    await c.set('a', '1');
-    await c.set('b', '2');
-    c.clear();
-    expect(c.getStats().size).toBe(0);
-  });
-
-  it('tracks hits and misses in stats', async () => {
-    const c = new CacheService<string>();
-    await c.set('k', 'v');
-    await c.get('k'); // hit
-    await c.get('absent'); // miss
-
-    const stats = c.getStats();
-    expect(stats.hits).toBeGreaterThanOrEqual(1);
-    expect(stats.misses).toBeGreaterThanOrEqual(1);
+    it('is false when status is end', () => {
+      const { svc } = makeService(makeRedis('end'));
+      expect(svc.isAvailable()).toBe(false);
+    });
   });
 });
