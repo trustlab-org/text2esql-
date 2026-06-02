@@ -1,4 +1,5 @@
 export type * from './api.types';
+export type * from './benchmark.types';
 export type * from './cache.types';
 export type * from './cost.types';
 export type * from './ecs.types';

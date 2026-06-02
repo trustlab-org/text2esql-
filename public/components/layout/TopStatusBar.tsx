@@ -7,6 +7,7 @@ import {
   EuiText,
   EuiIcon,
   EuiAvatar,
+  EuiButtonEmpty,
   useEuiTheme,
 } from '@elastic/eui';
 import { css } from '@emotion/react';
@@ -25,7 +26,11 @@ import { CostBadge } from '../statusbar/CostBadge';
  * Most badges render nothing until the first query produces data; FallbackBadge
  * always renders the green/orange system-status indicator.
  */
-export const TopStatusBar: React.FC = () => {
+interface TopStatusBarProps {
+  onOpenBenchmark?: () => void;
+}
+
+export const TopStatusBar: React.FC<TopStatusBarProps> = ({ onOpenBenchmark }) => {
   const { euiTheme } = useEuiTheme();
 
   const logoCss = css({
@@ -96,6 +101,18 @@ export const TopStatusBar: React.FC = () => {
             <EuiFlexItem grow={false}>
               <CostBadge />
             </EuiFlexItem>
+            {onOpenBenchmark && (
+              <EuiFlexItem grow={false}>
+                <EuiButtonEmpty
+                  size="s"
+                  iconType="visGauge"
+                  onClick={onOpenBenchmark}
+                  data-test-subj="queryCopilotOpenBenchmark"
+                >
+                  Benchmark
+                </EuiButtonEmpty>
+              </EuiFlexItem>
+            )}
             <EuiFlexItem grow={false}>
               <EuiAvatar name="Analyst User" initials="AU" size="m" color={euiTheme.colors.primary} />
             </EuiFlexItem>

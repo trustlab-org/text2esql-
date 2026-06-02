@@ -1,8 +1,16 @@
-import React, { useEffect } from 'react';
-import { EuiFlexGroup, EuiFlexItem } from '@elastic/eui';
+import React, { useEffect, useState } from 'react';
+import {
+  EuiFlexGroup,
+  EuiFlexItem,
+  EuiFlyout,
+  EuiFlyoutHeader,
+  EuiFlyoutBody,
+  EuiTitle,
+} from '@elastic/eui';
 import { css } from '@emotion/react';
 
 import { TopStatusBar } from '../components/layout/TopStatusBar';
+import { BenchmarkPanel } from '../components/benchmark/BenchmarkPanel';
 import { SplitLayout } from '../components/layout/SplitLayout';
 import { ChatPanel } from '../components/chat/ChatPanel';
 import { KQLEditorPanel } from '../components/editor/KQLEditorPanel';
@@ -20,6 +28,7 @@ import { setProviderState } from '../store/copilot.actions';
 export const AppShell: React.FC = () => {
   const { dispatch } = useCopilot();
   const { providerApi } = useServices();
+  const [benchmarkOpen, setBenchmarkOpen] = useState(false);
 
   // Initialise provider state on mount: the task specifies calling
   // ProviderApiService.getProviders(); getHealth() is fetched alongside (an
@@ -45,36 +54,56 @@ export const AppShell: React.FC = () => {
   }, [providerApi, dispatch]);
 
   return (
-    <EuiFlexGroup
-      direction="column"
-      gutterSize="none"
-      responsive={false}
-      data-test-subj="queryCopilotAppShell"
-      css={css({ height: '100vh' })}
-    >
-      <EuiFlexItem grow={false}>
-        <TopStatusBar />
-      </EuiFlexItem>
-      <EuiFlexItem grow css={css({ minHeight: 0 })}>
-        <SplitLayout
-          left={<ChatPanel />}
-          right={
-            <EuiFlexGroup
-              direction="column"
-              gutterSize="m"
-              responsive={false}
-              css={css({ overflowY: 'auto' })}
-            >
-              <EuiFlexItem grow={false}>
-                <KQLEditorPanel />
-              </EuiFlexItem>
-              <EuiFlexItem grow={false}>
-                <QueryOutputPanel />
-              </EuiFlexItem>
-            </EuiFlexGroup>
-          }
-        />
-      </EuiFlexItem>
-    </EuiFlexGroup>
+    <>
+      <EuiFlexGroup
+        direction="column"
+        gutterSize="none"
+        responsive={false}
+        data-test-subj="queryCopilotAppShell"
+        css={css({ height: '100vh' })}
+      >
+        <EuiFlexItem grow={false}>
+          <TopStatusBar onOpenBenchmark={() => setBenchmarkOpen(true)} />
+        </EuiFlexItem>
+        <EuiFlexItem grow css={css({ minHeight: 0 })}>
+          <SplitLayout
+            left={<ChatPanel />}
+            right={
+              <EuiFlexGroup
+                direction="column"
+                gutterSize="m"
+                responsive={false}
+                css={css({ overflowY: 'auto' })}
+              >
+                <EuiFlexItem grow={false}>
+                  <KQLEditorPanel />
+                </EuiFlexItem>
+                <EuiFlexItem grow={false}>
+                  <QueryOutputPanel />
+                </EuiFlexItem>
+              </EuiFlexGroup>
+            }
+          />
+        </EuiFlexItem>
+      </EuiFlexGroup>
+
+      {benchmarkOpen && (
+        <EuiFlyout
+          onClose={() => setBenchmarkOpen(false)}
+          size="l"
+          aria-labelledby="queryCopilotBenchmarkFlyoutTitle"
+          data-test-subj="queryCopilotBenchmarkFlyout"
+        >
+          <EuiFlyoutHeader hasBorder>
+            <EuiTitle size="m">
+              <h2 id="queryCopilotBenchmarkFlyoutTitle">Provider Benchmark</h2>
+            </EuiTitle>
+          </EuiFlyoutHeader>
+          <EuiFlyoutBody>
+            <BenchmarkPanel />
+          </EuiFlyoutBody>
+        </EuiFlyout>
+      )}
+    </>
   );
 };
