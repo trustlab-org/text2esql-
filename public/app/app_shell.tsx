@@ -4,6 +4,7 @@ import { css } from '@emotion/react';
 
 import { TopStatusBar } from '../components/layout/TopStatusBar';
 import { SplitLayout } from '../components/layout/SplitLayout';
+import { ChatPanel } from '../components/chat/ChatPanel';
 
 /**
  * Application shell. Composes the top status bar above a two-panel split
@@ -29,13 +30,6 @@ export const AppShell: React.FC = () => {
     </EuiFlexGroup>
   );
 };
-
-// Placeholder — replaced in a later task (7.x)
-const ChatPanel: React.FC = () => (
-  <EuiPanel hasShadow={false} color="transparent" data-test-subj="queryCopilotChatPanelPlaceholder">
-    <EuiText color="subdued">Chat panel</EuiText>
-  </EuiPanel>
-);
 
 // Placeholder — replaced in a later task (7.x)
 const KQLEditorPanel: React.FC = () => (

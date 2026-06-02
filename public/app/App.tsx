@@ -1,8 +1,10 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { EuiProvider } from '@elastic/eui';
 import type { CoreStart } from '@kbn/core/public';
 
 import { AppShell } from './app_shell';
+import { createServices, ServicesProvider } from '../services';
+import { CopilotProvider } from '../store/copilot.context';
 
 interface AppProps {
   readonly coreStart: CoreStart;
@@ -20,9 +22,15 @@ export const App: React.FC<AppProps> = ({ coreStart }) => {
 
   const colorMode = coreStart.theme.getTheme().darkMode ? 'dark' : 'light';
 
+  const services = useMemo(() => createServices(coreStart.http), [coreStart.http]);
+
   return (
     <EuiProvider colorMode={colorMode}>
-      <AppShell />
+      <ServicesProvider value={services}>
+        <CopilotProvider>
+          <AppShell />
+        </CopilotProvider>
+      </ServicesProvider>
     </EuiProvider>
   );
 };
