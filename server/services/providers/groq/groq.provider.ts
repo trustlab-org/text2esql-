@@ -80,8 +80,8 @@ export class GroqProvider extends BaseProvider {
   public getMetadata(): ProviderMetadata {
     return {
       name: PROVIDER_NAMES.GROQ,
-      role: 'fallback',
-      priority: 2,
+      role: 'primary',
+      priority: 1,
       maxTokens: this.config.maxTokens,
     };
   }

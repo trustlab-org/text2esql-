@@ -25,7 +25,8 @@ export const PROVIDER_DEFAULT_MODELS: Record<
 > = {
   // gemini-1.5-* retired from v1beta generateContent (404); 2.0-flash is the current GA default. Operators can override via query_copilot.providers.gemini.model; startup validation logs the models actually available to the configured key.
   gemini: 'gemini-2.0-flash',
-  groq: 'llama3-70b-8192',
+  // llama3-70b-8192 decommissioned by Groq; llama-3.3-70b-versatile is the current GA default. Override via query_copilot.providers.groq.model.
+  groq: 'llama-3.3-70b-versatile',
   ollama: 'llama3',
   anthropic: 'claude-3-5-sonnet-20241022',
   openai: 'gpt-4o',

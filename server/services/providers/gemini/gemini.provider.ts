@@ -144,8 +144,8 @@ export class GeminiProvider extends BaseProvider {
   public getMetadata(): ProviderMetadata {
     return {
       name: PROVIDER_NAMES.GEMINI,
-      role: 'primary',
-      priority: 1,
+      role: 'fallback',
+      priority: 2,
       maxTokens: this.config.maxTokens,
     };
   }
