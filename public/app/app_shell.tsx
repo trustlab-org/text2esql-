@@ -1,10 +1,11 @@
 import React from 'react';
-import { EuiFlexGroup, EuiFlexItem, EuiPanel, EuiText } from '@elastic/eui';
+import { EuiFlexGroup, EuiFlexItem } from '@elastic/eui';
 import { css } from '@emotion/react';
 
 import { TopStatusBar } from '../components/layout/TopStatusBar';
 import { SplitLayout } from '../components/layout/SplitLayout';
 import { ChatPanel } from '../components/chat/ChatPanel';
+import { KQLEditorPanel } from '../components/editor/KQLEditorPanel';
 
 /**
  * Application shell. Composes the top status bar above a two-panel split
@@ -30,14 +31,3 @@ export const AppShell: React.FC = () => {
     </EuiFlexGroup>
   );
 };
-
-// Placeholder — replaced in a later task (7.x)
-const KQLEditorPanel: React.FC = () => (
-  <EuiPanel
-    hasShadow={false}
-    color="transparent"
-    data-test-subj="queryCopilotEditorPanelPlaceholder"
-  >
-    <EuiText color="subdued">KQL editor &amp; output</EuiText>
-  </EuiPanel>
-);
