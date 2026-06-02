@@ -5,6 +5,7 @@ import { registerMetricsRoutes } from './metrics.routes';
 import { registerProviderRoutes } from './provider.routes';
 import { registerQueryRoutes } from './query.routes';
 import { registerExecutionRoutes } from './execution.routes';
+import { registerBenchmarkRoutes } from './benchmark.routes';
 
 /**
  * Registers all route groups with the Kibana router.
@@ -19,4 +20,5 @@ export function defineRoutes(router: IRouter, context: QueryCopilotContext): voi
   registerProviderRoutes(router, context);
   registerQueryRoutes(router, context);
   registerExecutionRoutes(router, context);
+  registerBenchmarkRoutes(router, context);
 }
