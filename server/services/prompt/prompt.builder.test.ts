@@ -83,6 +83,19 @@ describe('PromptBuilder', () => {
       expect(typeof result.temperature).toBe('number');
       expect(result.temperature as number).toBeLessThanOrEqual(0.2);
     });
+
+    it('includes the required JSON-output instruction', () => {
+      const builder = new PromptBuilder();
+      const result: ProviderPrompt = builder.buildGenerationPrompt(makeIntent(), makeContext(), [
+        userMsg('show failed logins for the administrator account'),
+      ]);
+
+      // The strict JSON output contract lives in the system prompt and is
+      // reinforced in the user message. Both must instruct a JSON-only reply.
+      expect(result.systemPrompt).toContain('JSON object');
+      expect(result.systemPrompt).toMatch(/Respond with EXACTLY ONE JSON object/i);
+      expect(result.userMessage).toMatch(/JSON object/i);
+    });
   });
 
   describe('buildCorrectionPrompt', () => {
