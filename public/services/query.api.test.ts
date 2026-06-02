@@ -26,7 +26,7 @@ describe('QueryApiService', () => {
 
   it('executeQuery posts kql and indexPattern to the execute endpoint', async () => {
     const http = {
-      post: jest.fn().mockResolvedValue({ columns: [], rows: [], total: 0, tookMs: 5 }),
+      post: jest.fn().mockResolvedValue({ columns: [], rows: [], total: 0, tookMs: 5, timedOut: false }),
       get: jest.fn(),
     };
     const svc = new QueryApiService(http as unknown as HttpSetup);

@@ -2,6 +2,7 @@ export type * from './api.types';
 export type * from './cache.types';
 export type * from './cost.types';
 export type * from './ecs.types';
+export type * from './execution.types';
 export type * from './intent.types';
 export type * from './observability.types';
 export type * from './pipeline.types';

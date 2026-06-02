@@ -140,7 +140,13 @@ describe('copilotReducer', () => {
   });
 
   it('SET_QUERY_RESULTS stores results and stops generating', () => {
-    const results = { columns: [], rows: [], total: 0, tookMs: 1 } as QueryExecutionResponse;
+    const results = {
+      columns: [],
+      rows: [],
+      total: 0,
+      tookMs: 1,
+      timedOut: false,
+    } as QueryExecutionResponse;
     const next = copilotReducer(
       { ...createInitialState('*'), isGenerating: true },
       setQueryResults(results)

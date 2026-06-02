@@ -4,6 +4,7 @@ import { registerHealthRoutes } from './health.routes';
 import { registerMetricsRoutes } from './metrics.routes';
 import { registerProviderRoutes } from './provider.routes';
 import { registerQueryRoutes } from './query.routes';
+import { registerExecutionRoutes } from './execution.routes';
 
 /**
  * Registers all route groups with the Kibana router.
@@ -17,4 +18,5 @@ export function defineRoutes(router: IRouter, context: QueryCopilotContext): voi
   registerMetricsRoutes(router, context);
   registerProviderRoutes(router, context);
   registerQueryRoutes(router, context);
+  registerExecutionRoutes(router, context);
 }

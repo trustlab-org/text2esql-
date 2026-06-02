@@ -1,6 +1,7 @@
 import type { QueryLanguage } from '../constants';
 import type { ProviderName } from './provider.types';
 import type { ConversationMessage, QueryPipelineResult } from './pipeline.types';
+import type { QueryExecutionResult } from './execution.types';
 
 /**
  * Shared HTTP API contract between the Query Copilot browser client and server.
@@ -24,13 +25,13 @@ export interface QueryGenerationRequest {
 /** Response from `POST /api/query_copilot/generate` — the full pipeline result. */
 export type QueryGenerationResponse = QueryPipelineResult;
 
-/** Response from executing a generated KQL query against an index. */
-export interface QueryExecutionResponse {
-  readonly columns: readonly string[];
-  readonly rows: ReadonlyArray<Record<string, unknown>>;
-  readonly total: number;
-  readonly tookMs: number;
-}
+/**
+ * Response from executing a generated KQL query against an index.
+ *
+ * Aliased to {@link QueryExecutionResult} so the executor service's result and
+ * the wire contract are a single source of truth.
+ */
+export type QueryExecutionResponse = QueryExecutionResult;
 
 /** Status of a single LLM provider (item in `GET /api/query_copilot/providers`). */
 export interface ProviderStatus {

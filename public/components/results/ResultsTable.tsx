@@ -7,13 +7,21 @@ import {
   EuiText,
   EuiToolTip,
 } from '@elastic/eui';
+import type { ColumnDataType, ColumnDefinition } from '../../../common/types';
 
 export interface ResultsTableProps {
   rows: ReadonlyArray<Record<string, unknown>>;
-  columns?: readonly string[];
+  columns?: readonly ColumnDefinition[];
 }
 
 type Row = Record<string, unknown>;
+
+/** Internal, render-ready column descriptor. */
+interface TableField {
+  readonly id: string;
+  readonly name: string;
+  readonly dataType?: ColumnDataType;
+}
 
 /** Matches an IPv4 dotted-quad address. */
 const IPV4_RE = /^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)$/;
@@ -82,8 +90,12 @@ function isIpAddress(value: unknown): boolean {
   return IPV4_RE.test(str) || IPV6_RE.test(str);
 }
 
-/** Renders a single cell, choosing a representation based on field/value. */
-function renderCell(field: string, value: unknown): React.ReactNode {
+/**
+ * Renders a single cell, choosing a representation based on field/value. When
+ * a `dataType` is supplied (from the server's column definitions) it drives the
+ * choice, otherwise the field-name/value heuristics are used as a fallback.
+ */
+function renderCell(field: string, value: unknown, dataType?: ColumnDataType): React.ReactNode {
   if (value === null || value === undefined) {
     return (
       <EuiText size="s" color="subdued">
@@ -92,7 +104,10 @@ function renderCell(field: string, value: unknown): React.ReactNode {
     );
   }
 
-  if (isTimestampField(field, value)) {
+  const isTimestamp = dataType ? dataType === 'date' : isTimestampField(field, value);
+  const isIp = dataType ? dataType === 'ip' : isIpAddress(value);
+
+  if (isTimestamp) {
     // The task asks for a "relative" timestamp, but the mockup shows an
     // ABSOLUTE `YYYY-MM-DD HH:MM:SS`. We satisfy both: render absolute text
     // (matching the mockup) and expose the relative description in a tooltip.
@@ -108,7 +123,7 @@ function renderCell(field: string, value: unknown): React.ReactNode {
     );
   }
 
-  if (isIpAddress(value)) {
+  if (isIp) {
     return <EuiCode>{String(value)}</EuiCode>;
   }
 
@@ -135,16 +150,23 @@ function compareValues(a: unknown, b: unknown): number {
  * current page slice is handed to the table as `items`.
  */
 export const ResultsTable: React.FC<ResultsTableProps> = ({ rows, columns }) => {
-  const fields = useMemo<string[]>(
-    () => (columns && columns.length > 0 ? [...columns] : rows[0] ? Object.keys(rows[0]) : []),
+  const fields = useMemo<TableField[]>(
+    () =>
+      columns && columns.length > 0
+        ? columns.map((c) => ({ id: c.id, name: c.displayName, dataType: c.dataType }))
+        : rows[0]
+        ? Object.keys(rows[0]).map((k) => ({ id: k, name: k, dataType: undefined }))
+        : [],
     [columns, rows]
   );
+
+  const fieldIds = useMemo<string[]>(() => fields.map((f) => f.id), [fields]);
 
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(25);
   // Default sort: `@timestamp` desc; fall back to the first column if absent.
   const [sortField, setSortField] = useState<string>(() =>
-    fields.includes('@timestamp') ? '@timestamp' : fields[0] ?? '@timestamp'
+    fieldIds.includes('@timestamp') ? '@timestamp' : fieldIds[0] ?? '@timestamp'
   );
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
@@ -164,13 +186,13 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({ rows, columns }) => 
 
   const tableColumns = useMemo<Array<EuiBasicTableColumn<Row>>>(
     () =>
-      fields.map((field) => ({
-        field,
-        name: field,
+      fields.map((f) => ({
+        field: f.id,
+        name: f.name,
         sortable: true,
         truncateText: true,
-        width: field === '@timestamp' ? '160px' : undefined,
-        render: (value: unknown) => renderCell(field, value),
+        width: f.id === '@timestamp' ? '160px' : undefined,
+        render: (value: unknown) => renderCell(f.id, value, f.dataType),
       })),
     [fields]
   );
