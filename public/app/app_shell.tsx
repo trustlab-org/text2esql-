@@ -78,7 +78,7 @@ export const AppShell: React.FC = () => {
                 <EuiFlexItem grow={false}>
                   <KQLEditorPanel />
                 </EuiFlexItem>
-                <EuiFlexItem grow={false}>
+                <EuiFlexItem grow>
                   <QueryOutputPanel />
                 </EuiFlexItem>
               </EuiFlexGroup>
