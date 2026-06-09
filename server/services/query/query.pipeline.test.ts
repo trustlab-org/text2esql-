@@ -12,6 +12,8 @@ import type { CostEstimatorService } from '../cost';
 import type { LoggerService, MetricsService } from '../observability';
 import type { InvestigationIntent, QueryPipelineResult, CostEstimate } from '../../../common/types';
 import type { SchemaContext } from '../schema';
+import type { ESIndexMapping, IndexMappingProvider } from '../schema/es.mapping.fetcher';
+import { McpConnectionError } from '../mcp';
 
 // ── Fixtures ────────────────────────────────────────────────────────────
 const normalized: NormalizedQuery = {
@@ -142,7 +144,7 @@ function makeMocks() {
 
 type Mocks = ReturnType<typeof makeMocks>;
 
-function makePipeline(m: Mocks): QueryPipeline {
+function makePipeline(m: Mocks, mcpMappingProvider?: IndexMappingProvider): QueryPipeline {
   return new QueryPipeline(
     m.cache as unknown as CacheService,
     m.normalizer as unknown as QueryNormalizer,
@@ -156,8 +158,20 @@ function makePipeline(m: Mocks): QueryPipeline {
     m.tokenEstimator as unknown as TokenEstimatorService,
     m.costEstimator as unknown as CostEstimatorService,
     m.logger as unknown as LoggerService,
-    m.metrics as unknown as MetricsService
+    m.metrics as unknown as MetricsService,
+    mcpMappingProvider
   );
+}
+
+/** A normalized mapping fixture, as either provider would return it. */
+function makeMapping(): ESIndexMapping {
+  return {
+    indexPattern: 'logs-*',
+    fields: new Map([
+      ['user.name', { name: 'user.name', type: 'keyword', searchable: true, aggregatable: true }],
+    ]),
+    fetchedAt: new Date(),
+  };
 }
 
 function makeCachedResult(): QueryPipelineResult {
@@ -313,5 +327,57 @@ describe('QueryPipeline', () => {
       expect(result).toHaveProperty(key);
     }
     expect(result.costEstimate.totalCostUsd).toBe(0.0015);
+  });
+
+  describe('mapping source (queryCopilot.mcp.enabled)', () => {
+    it('MCP-OFF: uses ESMappingFetcher for the schema-context stage', async () => {
+      const m = makeMocks();
+
+      // No mcpMappingProvider passed → default (asCurrentUser) path.
+      const result = await makePipeline(m).execute(request);
+
+      expect(result.status).toBe('succeeded');
+      expect(m.esMappingFetcher.fetchIndexMappings).toHaveBeenCalledTimes(1);
+      expect(m.esMappingFetcher.fetchIndexMappings).toHaveBeenCalledWith(request.indexPattern);
+    });
+
+    it('MCP-ON: uses the MCP mapping provider and NOT ESMappingFetcher', async () => {
+      const m = makeMocks();
+      const mapping = makeMapping();
+      const mcpMappingProvider: IndexMappingProvider = {
+        fetchIndexMappings: jest.fn().mockResolvedValue(mapping),
+      };
+
+      const result = await makePipeline(m, mcpMappingProvider).execute(request);
+
+      expect(result.status).toBe('succeeded');
+      // The MCP provider supplies the mapping...
+      expect(mcpMappingProvider.fetchIndexMappings).toHaveBeenCalledTimes(1);
+      expect(mcpMappingProvider.fetchIndexMappings).toHaveBeenCalledWith(request.indexPattern);
+      // ...and the asCurrentUser fetcher is bypassed entirely (no silent dual-read).
+      expect(m.esMappingFetcher.fetchIndexMappings).not.toHaveBeenCalled();
+      // ...and that mapping reaches the ECS context builder.
+      expect(m.ecsMapper.buildContext).toHaveBeenCalledWith(intent, mapping);
+    });
+
+    it('MCP-UNREACHABLE: surfaces the typed error as a failed result with NO fallback', async () => {
+      const m = makeMocks();
+      const mcpMappingProvider: IndexMappingProvider = {
+        fetchIndexMappings: jest
+          .fn()
+          .mockRejectedValue(new McpConnectionError('ECONNREFUSED')),
+      };
+
+      const result = await makePipeline(m, mcpMappingProvider).execute(request);
+
+      // The pipeline never throws; the McpError becomes a failed result whose
+      // errorMessage carries the typed error's message, and it is logged.
+      expect(result.status).toBe('failed');
+      expect(result.errorCode).toBe('INTERNAL_ERROR');
+      expect(result.errorMessage).toContain('Failed to reach the MCP server');
+      expect(m.logger.logError).toHaveBeenCalled();
+      // Crucially: NO silent fallback to the asCurrentUser path.
+      expect(m.esMappingFetcher.fetchIndexMappings).not.toHaveBeenCalled();
+    });
   });
 });

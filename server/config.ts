@@ -87,6 +87,11 @@ export const configSchema = schema.object({
 
   // ── MCP (Elasticsearch MCP Server client) ────────────────────────────────
   mcp: schema.object({
+    // Feature flag for the MCP mapping path. When `true`, index-mapping lookups
+    // in the query pipeline are served by the MCP server's `get_mappings` tool
+    // instead of the per-request `asCurrentUser` ESMappingFetcher. Defaults to
+    // `false` so the existing RBAC-honouring path remains the default.
+    enabled: schema.boolean({ defaultValue: false }),
     serverUrl: schema.string({ defaultValue: 'http://localhost:8080/mcp' }),
     requestTimeoutMs: schema.number({
       defaultValue: 30000,

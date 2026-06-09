@@ -54,6 +54,7 @@ import { SYSTEM_PROMPT_VERSION } from '../prompt';
 import { CacheKeyBuilder, type CacheService } from '../cache';
 import type { QueryNormalizer, IntentExtractorService, NormalizedQuery } from '../intent';
 import type { ESMappingFetcher, ECSContextMapper } from '../schema';
+import type { IndexMappingProvider } from '../schema/es.mapping.fetcher';
 import type { PromptBuilder } from '../prompt';
 import type { ProviderRouter, ProviderResponse } from '../providers';
 import type { KQLValidatorService, ValidationResult } from '../validation';
@@ -107,7 +108,14 @@ export class QueryPipeline {
     private readonly tokenEstimator: TokenEstimatorService,
     private readonly costEstimator: CostEstimatorService,
     private readonly logger: LoggerService,
-    private readonly metrics: MetricsService
+    private readonly metrics: MetricsService,
+    /**
+     * Optional MCP-backed index-mapping provider. When injected (i.e. the
+     * `queryCopilot.mcp.enabled` flag is on), the schema-context stage sources
+     * field mappings from this provider instead of {@link ESMappingFetcher}.
+     * See the schema-context stage for the RBAC implications.
+     */
+    private readonly mcpMappingProvider?: IndexMappingProvider
   ) {}
 
   /**
@@ -226,7 +234,17 @@ export class QueryPipeline {
 
       // ── 4. Schema context ─────────────────────────────────────────────
       const tSchema = Date.now();
-      const esMapping = await this.esMappingFetcher.fetchIndexMappings(request.indexPattern);
+      // MAPPING SOURCE (queryCopilot.mcp.enabled): when an MCP mapping provider is
+      // injected, field mappings come from the MCP server's get_mappings tool.
+      // RBAC DIVERGENCE: that path authenticates as the MCP container's ES identity
+      // (Aryan), NOT the per-request asCurrentUser ESMappingFetcher path used when the
+      // flag is off. Both return the identical ESIndexMapping, so downstream is agnostic.
+      // If the MCP server is unreachable, the typed McpConnectionError/McpTimeoutError
+      // propagates from here — we do NOT fall back to asCurrentUser, so an MCP outage
+      // surfaces loudly rather than being silently masked.
+      const esMapping = await (this.mcpMappingProvider ?? this.esMappingFetcher).fetchIndexMappings(
+        request.indexPattern
+      );
       const schemaContext = this.ecsMapper.buildContext(intent, esMapping);
       ctx.addStage({
         stage: 'schema_context',

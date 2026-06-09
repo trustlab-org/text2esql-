@@ -47,6 +47,7 @@ import { PromptBuilder } from './services/prompt';
 import { KQLValidatorService } from './services/validation';
 import { CorrectionEngine, CorrectionPromptBuilder } from './services/correction';
 import { QueryPipeline } from './services/query';
+import { McpClientService, McpMappingProvider } from './services/mcp';
 import type { ElasticsearchClient } from '@kbn/core/server';
 import type Redis from 'ioredis';
 
@@ -64,6 +65,7 @@ export class QueryCopilotPlugin
   private healthMonitor!: HealthMonitor;
   private providerMap?: ReadonlyMap<ProviderName, ILLMProvider>;
   private redisClient?: Redis;
+  private mcpClient?: McpClientService;
 
   constructor(initializerContext: PluginInitializerContext) {
     this.initializerContext = initializerContext;
@@ -140,6 +142,21 @@ export class QueryCopilotPlugin
     const costEstimator = new CostEstimatorService();
     const esMappingLogger = this.logger.get('schema');
 
+    // ── MCP mapping path (feature-flagged) ─────────────────────────────────────
+    // The MCP client is constructed unconditionally (so stop() can close it and
+    // start() can opportunistically connect it), but it is only wired into the
+    // pipeline's index-mapping lookup when queryCopilot.mcp.enabled is true.
+    const mcpClient = new McpClientService(this.configService, this.logger.get('mcp'));
+    this.mcpClient = mcpClient;
+    const mcpEnabled = this.configService.getMcpConfig().enabled;
+    const mcpMappingProvider = mcpEnabled ? new McpMappingProvider(mcpClient) : undefined;
+    if (mcpEnabled) {
+      this.logger.info(
+        'queryCopilot: MCP mapping path ENABLED — get_mappings via MCP server ' +
+          '(RBAC: MCP container identity, not asCurrentUser)'
+      );
+    }
+
     // A QueryPipeline is built per request, bound to the request-scoped ES client
     // (so index-mapping reads honour the requesting user's permissions). The other
     // collaborators above are stateless singletons created once here.
@@ -157,7 +174,8 @@ export class QueryCopilotPlugin
         tokenEstimator,
         costEstimator,
         loggerService,
-        metricsService
+        metricsService,
+        mcpMappingProvider
       );
 
     // ── Plugin context ────────────────────────────────────────────────────────
@@ -185,6 +203,22 @@ export class QueryCopilotPlugin
   ): Promise<QueryCopilotPluginStart> {
     this.logger.info('queryCopilot: start');
     await this.validateProviders();
+
+    // Best-effort eager connect to the MCP server when the mapping path is enabled.
+    // This is purely an optimisation: McpClientService lazily connects on first use
+    // and surfaces typed McpConnectionError/McpTimeoutError at request time, so a
+    // failure here MUST NOT block Kibana startup — log and continue.
+    if (this.configService.getMcpConfig().enabled && this.mcpClient) {
+      try {
+        await this.mcpClient.connect();
+        this.logger.info('queryCopilot: connected to MCP server');
+      } catch (err) {
+        this.logger.error(
+          `queryCopilot: MCP server connect failed at startup (continuing; will retry lazily per request): ${err}`
+        );
+      }
+    }
+
     return {};
   }
 
@@ -196,6 +230,9 @@ export class QueryCopilotPlugin
     if (this.redisClient) {
       this.redisClient.disconnect();
     }
+    // Fire-and-forget MCP teardown (mirrors the redisClient.disconnect() pattern);
+    // close() is non-throwing and swallows its own errors.
+    void this.mcpClient?.close();
   }
 
   // ── Private ───────────────────────────────────────────────────────────────

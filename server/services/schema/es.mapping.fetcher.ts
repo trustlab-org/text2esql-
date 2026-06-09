@@ -43,13 +43,37 @@ export interface ESIndexMapping {
 }
 
 /**
+ * Source of resolved Elasticsearch index mappings for the query pipeline.
+ *
+ * This is the seam the pipeline depends on for its "schema context" stage. Two
+ * implementations exist:
+ *  - {@link ESMappingFetcher} — the default, calling `field_caps` as the
+ *    per-request `asCurrentUser` Elasticsearch client (RBAC honoured per user).
+ *  - `McpMappingProvider` — the feature-flagged path, sourcing mappings from the
+ *    MCP server's `get_mappings` tool (RBAC of the MCP container's ES identity).
+ *
+ * Both return the identical normalized {@link ESIndexMapping}, so downstream
+ * prompt-building is agnostic to which provider produced the mapping.
+ */
+export interface IndexMappingProvider {
+  /**
+   * Resolve the field mappings for the given index pattern.
+   *
+   * @param indexPattern - An Elasticsearch index pattern, possibly containing
+   *   wildcards (e.g. `"logs-*"`).
+   * @returns A normalized {@link ESIndexMapping}.
+   */
+  fetchIndexMappings(indexPattern: string): Promise<ESIndexMapping>;
+}
+
+/**
  * Fetches and normalizes Elasticsearch index mappings via the `field_caps` API.
  *
  * The resulting {@link ESIndexMapping} excludes structural parents (`object` /
  * `nested` fields) and metadata fields (`_id`, `_index`, `_source`, …) since
  * those are not directly queryable values.
  */
-export class ESMappingFetcher {
+export class ESMappingFetcher implements IndexMappingProvider {
   /**
    * @param esClient - Kibana's scoped {@link ElasticsearchClient}, used to call
    *   the `field_caps` API.
