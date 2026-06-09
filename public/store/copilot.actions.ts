@@ -17,6 +17,7 @@ import {
   type SendQueryAction,
   type SetGeneratingAction,
   type SetProviderStateAction,
+  type SetIndexPatternAction,
   type SetQueryResultsAction,
   type SetTimeRangeAction,
   type SetValidationResultAction,
@@ -80,4 +81,9 @@ export function setQueryResults(
 /** Replaces the time window applied to the next query execution. */
 export function setTimeRange(timeRange: TimeRange): SetTimeRangeAction {
   return { type: COPILOT_ACTION_TYPES.SET_TIME_RANGE, timeRange };
+}
+
+/** Replaces the index pattern used for query generation and execution. */
+export function setIndexPattern(indexPattern: string): SetIndexPatternAction {
+  return { type: COPILOT_ACTION_TYPES.SET_INDEX_PATTERN, indexPattern };
 }

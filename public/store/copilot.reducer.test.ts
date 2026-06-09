@@ -1,3 +1,4 @@
+import { DEFAULT_INDEX_PATTERN } from '../../common';
 import type {
   ConversationMessage,
   CostEstimate,
@@ -15,6 +16,7 @@ import {
   resetSession,
   sendQuery,
   setGenerating,
+  setIndexPattern,
   setProviderState,
   setQueryResults,
   setTimeRange,
@@ -82,8 +84,17 @@ describe('copilotReducer', () => {
     expect(next.timeRange).toEqual({ from: 'now-10m', to: 'now' });
   });
 
-  it('INITIAL_COPILOT_STATE defaults to a wildcard index pattern', () => {
-    expect(INITIAL_COPILOT_STATE.indexPattern).toBe('*');
+  it('INITIAL_COPILOT_STATE defaults to the configured default index pattern', () => {
+    expect(INITIAL_COPILOT_STATE.indexPattern).toBe(DEFAULT_INDEX_PATTERN);
+    expect(INITIAL_COPILOT_STATE.indexPattern).toBe('fosstlsoc-logs-*');
+  });
+
+  it('SET_INDEX_PATTERN updates the index pattern', () => {
+    const next = copilotReducer(
+      createInitialState('*'),
+      setIndexPattern('fosstlsoc-logs-2026')
+    );
+    expect(next.indexPattern).toBe('fosstlsoc-logs-2026');
   });
 
   it('SEND_QUERY sets isGenerating and clears error', () => {

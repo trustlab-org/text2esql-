@@ -2,15 +2,17 @@ import React from 'react';
 import {
   EuiButton,
   EuiButtonEmpty,
+  EuiFieldText,
   EuiFlexGroup,
   EuiFlexItem,
   EuiSuperDatePicker,
   type OnTimeChangeProps,
 } from '@elastic/eui';
 
+import { DEFAULT_INDEX_PATTERN } from '../../../common';
 import { useCopilot } from '../../store/copilot.context';
 import { useQueryExecution } from '../../hooks/useQueryExecution';
-import { setTimeRange } from '../../store/copilot.actions';
+import { setIndexPattern, setTimeRange } from '../../store/copilot.actions';
 
 export interface EditorToolbarProps {
   isEditing: boolean;
@@ -37,6 +39,17 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ isEditing, onToggl
       justifyContent="flexEnd"
       responsive={false}
     >
+      <EuiFlexItem grow={false} style={{ width: 240 }}>
+        <EuiFieldText
+          compressed
+          prepend="Index"
+          value={state.indexPattern}
+          onChange={(e) => dispatch(setIndexPattern(e.target.value))}
+          placeholder={DEFAULT_INDEX_PATTERN}
+          aria-label="Index pattern"
+          data-test-subj="queryCopilotIndexPatternField"
+        />
+      </EuiFlexItem>
       <EuiFlexItem grow>
         <EuiSuperDatePicker
           compressed

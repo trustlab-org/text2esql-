@@ -8,6 +8,8 @@ import { CopilotProvider } from '../store/copilot.context';
 
 interface AppProps {
   readonly coreStart: CoreStart;
+  /** Configured default index pattern, used to seed the copilot session state. */
+  readonly defaultIndexPattern: string;
 }
 
 /**
@@ -15,7 +17,7 @@ interface AppProps {
  * theming (color mode derived from the active Kibana theme), and renders the
  * application shell.
  */
-export const App: React.FC<AppProps> = ({ coreStart }) => {
+export const App: React.FC<AppProps> = ({ coreStart, defaultIndexPattern }) => {
   useEffect(() => {
     coreStart.chrome.setBreadcrumbs([{ text: 'Query Copilot' }]);
   }, [coreStart]);
@@ -27,7 +29,7 @@ export const App: React.FC<AppProps> = ({ coreStart }) => {
   return (
     <EuiProvider colorMode={colorMode}>
       <ServicesProvider value={services}>
-        <CopilotProvider>
+        <CopilotProvider indexPattern={defaultIndexPattern}>
           <AppShell />
         </CopilotProvider>
       </ServicesProvider>

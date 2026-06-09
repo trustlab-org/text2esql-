@@ -95,6 +95,14 @@ export class ConfigService {
     return this.config.enabled;
   }
 
+  /**
+   * Returns the configured default Elasticsearch index pattern.
+   * Used to scope mapping lookups and query execution away from noise indices.
+   */
+  public getDefaultIndexPattern(): string {
+    return this.config.defaultIndexPattern;
+  }
+
   // ── Redis ─────────────────────────────────────────────────────────────────
 
   public getRedisConfig(): Readonly<RedisConfig> {

@@ -1,3 +1,4 @@
+import { DEFAULT_INDEX_PATTERN } from '../../common';
 import { COPILOT_ACTION_TYPES, type CopilotAction, type CopilotState } from './types';
 
 /**
@@ -23,8 +24,8 @@ export function createInitialState(indexPattern: string): CopilotState {
   };
 }
 
-/** Default initial state, using a wildcard index pattern. */
-export const INITIAL_COPILOT_STATE: CopilotState = createInitialState('*');
+/** Default initial state, using the configured default index pattern. */
+export const INITIAL_COPILOT_STATE: CopilotState = createInitialState(DEFAULT_INDEX_PATTERN);
 
 /**
  * Exhaustiveness guard. The `switch` default calls this with the narrowed
@@ -79,6 +80,9 @@ export function copilotReducer(state: CopilotState, action: CopilotAction): Copi
 
     case COPILOT_ACTION_TYPES.SET_TIME_RANGE:
       return { ...state, timeRange: action.timeRange };
+
+    case COPILOT_ACTION_TYPES.SET_INDEX_PATTERN:
+      return { ...state, indexPattern: action.indexPattern };
 
     case COPILOT_ACTION_TYPES.RESET_SESSION:
       return createInitialState(state.indexPattern);

@@ -38,6 +38,22 @@ describe('QueryApiService', () => {
     });
   });
 
+  it('executeQuery forwards a scoped (non-wildcard) index pattern in the POST body', async () => {
+    const http = {
+      post: jest.fn().mockResolvedValue({ columns: [], rows: [], total: 0, tookMs: 5, timedOut: false }),
+      get: jest.fn(),
+    };
+    const svc = new QueryApiService(http as unknown as HttpSetup);
+
+    await svc.executeQuery('event.action:*', 'fosstlsoc-logs-*');
+
+    expect(http.post).toHaveBeenCalledTimes(1);
+    const [, options] = http.post.mock.calls[0] as [string, { body: string }];
+    const sentBody = JSON.parse(options.body) as { kql: string; indexPattern: string };
+    expect(sentBody.indexPattern).toBe('fosstlsoc-logs-*');
+    expect(sentBody.indexPattern).not.toBe('*');
+  });
+
   it('rejects with ApiError on a failed request', async () => {
     const http = {
       post: jest.fn().mockRejectedValue({ response: { status: 503 }, body: { message: 'down' } }),

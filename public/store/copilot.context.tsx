@@ -6,6 +6,7 @@ import React, {
   useReducer,
   useRef,
 } from 'react';
+import { DEFAULT_INDEX_PATTERN } from '../../common';
 import type { ConversationMessage } from '../../common/types';
 import { ApiError, useServices } from '../services';
 import {
@@ -61,7 +62,7 @@ export function CopilotProvider({ children, indexPattern, sessionId }: CopilotPr
   const services = useServices();
 
   const [state, dispatch] = useReducer(copilotReducer, undefined, () =>
-    createInitialState(indexPattern ?? '*')
+    createInitialState(indexPattern ?? DEFAULT_INDEX_PATTERN)
   );
 
   // Stable session id for the lifetime of the provider.

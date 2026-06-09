@@ -67,6 +67,7 @@ export const COPILOT_ACTION_TYPES = {
   SET_VALIDATION_RESULT: 'SET_VALIDATION_RESULT',
   SET_QUERY_RESULTS: 'SET_QUERY_RESULTS',
   SET_TIME_RANGE: 'SET_TIME_RANGE',
+  SET_INDEX_PATTERN: 'SET_INDEX_PATTERN',
 } as const;
 
 export type CopilotActionType =
@@ -128,6 +129,11 @@ export interface SetTimeRangeAction {
   readonly timeRange: TimeRange;
 }
 
+export interface SetIndexPatternAction {
+  readonly type: typeof COPILOT_ACTION_TYPES.SET_INDEX_PATTERN;
+  readonly indexPattern: string;
+}
+
 /** Discriminated union of every copilot action. */
 export type CopilotAction =
   | SendQueryAction
@@ -140,4 +146,5 @@ export type CopilotAction =
   | ResetSessionAction
   | SetValidationResultAction
   | SetQueryResultsAction
-  | SetTimeRangeAction;
+  | SetTimeRangeAction
+  | SetIndexPatternAction;

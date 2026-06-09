@@ -11,11 +11,18 @@ import { App } from './app/App';
  *
  * Uses React 17's ReactDOM.render (the runtime here is React 17; createRoot /
  * react-dom/client are not available).
+ *
+ * @param defaultIndexPattern - Configured default index pattern, threaded from
+ *   the server config through the plugin and used to seed the copilot state.
  */
-export function renderApp(coreStart: CoreStart, element: HTMLElement): () => void {
+export function renderApp(
+  coreStart: CoreStart,
+  element: HTMLElement,
+  defaultIndexPattern: string
+): () => void {
   ReactDOM.render(
     <KibanaContextProvider services={coreStart}>
-      <App coreStart={coreStart} />
+      <App coreStart={coreStart} defaultIndexPattern={defaultIndexPattern} />
     </KibanaContextProvider>,
     element
   );

@@ -1,9 +1,14 @@
 import { schema, type TypeOf } from '@kbn/config-schema';
-import { PROVIDER_DEFAULT_MODELS } from '../common';
+import { DEFAULT_INDEX_PATTERN, PROVIDER_DEFAULT_MODELS } from '../common';
 
 export const configSchema = schema.object({
   // ── Top-level ────────────────────────────────────────────────────────────
   enabled: schema.boolean({ defaultValue: true }),
+
+  // Default Elasticsearch index pattern. Exposed to the browser (see
+  // server/index.ts) so the client can seed its initial state. Defaults to a
+  // scoped pattern rather than `*` to avoid matching noise indices.
+  defaultIndexPattern: schema.string({ defaultValue: DEFAULT_INDEX_PATTERN, minLength: 1 }),
 
   // ── Redis (response cache backing store) ─────────────────────────────────
   redis: schema.object({

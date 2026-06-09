@@ -2,6 +2,15 @@ export const PLUGIN_ID = 'queryCopilot' as const;
 export const PLUGIN_NAME = 'Query Copilot' as const;
 export const PLUGIN_ROUTE_PREFIX = '/api/query_copilot' as const;
 
+/**
+ * Default Elasticsearch index pattern used for query generation and execution.
+ *
+ * Real log indices share the prefix `fosstlsoc-logs-*`. A bare `*` would match
+ * ~300 noise indices (`.kibana*`, `.internal.alerts-*`, etc.) and pollute
+ * mapping lookups, so this scoped default is used instead of `*`.
+ */
+export const DEFAULT_INDEX_PATTERN = 'fosstlsoc-logs-*' as const;
+
 export const INVESTIGATION_TYPES = {
   BRUTE_FORCE: 'brute_force',
   PRIVILEGE_ESCALATION: 'privilege_escalation',
