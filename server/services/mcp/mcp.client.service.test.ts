@@ -135,10 +135,13 @@ describe('McpClientService', () => {
         ])
       );
 
-      const result = await service.listIndices();
+      const result = await service.listIndices('logs-*');
 
       const [params] = clientMock().callTool.mock.calls[0];
-      expect(params).toMatchObject({ name: 'list_indices' });
+      expect(params).toMatchObject({
+        name: 'list_indices',
+        arguments: { index_pattern: 'logs-*' },
+      });
 
       expect(result).toEqual([
         { name: 'logs-2026', health: 'green', status: 'open', docsCount: 42 },
@@ -187,7 +190,7 @@ describe('McpClientService', () => {
   });
 
   describe('search', () => {
-    it('calls callTool with search + { index, queryBody } and normalises hits', async () => {
+    it('calls callTool with search + { index, query_body } and normalises hits', async () => {
       clientMock().callTool.mockResolvedValueOnce(
         textResult({
           took: 12,
@@ -203,7 +206,7 @@ describe('McpClientService', () => {
 
       expect(clientMock().callTool.mock.calls[0][0]).toEqual({
         name: 'search',
-        arguments: { index: 'logs-*', queryBody: { match_all: {} } },
+        arguments: { index: 'logs-*', query_body: { match_all: {} } },
       });
 
       expect(result.total).toBe(1);
@@ -220,14 +223,30 @@ describe('McpClientService', () => {
         textResult({ reason: 'index_not_found' }, true)
       );
 
-      await expect(service.listIndices()).rejects.toBeInstanceOf(McpToolError);
+      await expect(service.listIndices('logs-*')).rejects.toBeInstanceOf(McpToolError);
+    });
+
+    it('maps a JSON-RPC -32602 (invalid params) error to McpToolError carrying the server message', async () => {
+      const rpcErr = Object.assign(
+        new Error('MCP error -32602: Invalid params: query_body is required'),
+        { code: -32602 }
+      );
+      clientMock().callTool.mockRejectedValueOnce(rpcErr);
+      let caught: unknown;
+      try {
+        await service.search('logs-*', {});
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).toBeInstanceOf(McpToolError);
+      expect((caught as Error).message).toContain('Invalid params: query_body is required');
     });
   });
 
   describe('passes the configured request timeout', () => {
     it('forwards requestTimeoutMs to callTool options', async () => {
       clientMock().callTool.mockResolvedValueOnce(textResult([]));
-      await service.listIndices();
+      await service.listIndices('logs-*');
       expect(clientMock().callTool.mock.calls[0][2]).toEqual({ timeout: TIMEOUT_MS });
     });
   });
@@ -240,7 +259,7 @@ describe('McpClientService', () => {
 
       // After close, a subsequent tool call re-connects.
       clientMock().callTool.mockResolvedValueOnce(textResult([]));
-      await service.listIndices();
+      await service.listIndices('logs-*');
       expect(clientMock().connect).toHaveBeenCalledTimes(2);
     });
   });

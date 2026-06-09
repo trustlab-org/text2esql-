@@ -214,7 +214,11 @@ export class McpClientService {
           { cause: error }
         );
       }
-      // Anything else is treated as a tool-level failure.
+      // Anything else is a tool-level / JSON-RPC protocol failure. The SDK
+      // rejects `callTool` with an Error carrying a numeric JSON-RPC `code`
+      // (e.g. -32602 "Invalid params") and the server's human-readable text in
+      // `error.message`. Surface it as a typed McpToolError, preserving the
+      // server's message verbatim, rather than letting a raw error escape.
       throw new McpToolError(name, error instanceof Error ? error.message : String(error), {
         cause: error,
       });
@@ -248,15 +252,18 @@ export class McpClientService {
    * List the indices visible to the connected cluster via the `list_indices`
    * tool.
    *
-   * The Elastic Elasticsearch MCP server's `list_indices` takes no required
-   * arguments, so we pass an empty argument object. The output shape varies
-   * between server versions, so each summary is mapped defensively (tolerating
-   * `name`/`index` and `docsCount`/`docs.count`/`docs_count` variants).
+   * The Elastic Elasticsearch MCP server's `list_indices` REQUIRES an
+   * `index_pattern` argument (VERIFIED against the live server v0.4.6 — it is
+   * NOT a no-arg call). The caller's `indexPattern` is forwarded as
+   * `index_pattern`. The output shape varies between server versions, so each
+   * summary is mapped defensively (tolerating `name`/`index` and
+   * `docsCount`/`docs.count`/`docs_count` variants).
    *
+   * @param indexPattern - An Elasticsearch index pattern (e.g. `"logs-*"`).
    * @returns A read-only array of {@link McpIndexSummary}.
    */
-  async listIndices(): Promise<readonly McpIndexSummary[]> {
-    const parsed = await this.callTool(ToolName.ListIndices, {});
+  async listIndices(indexPattern: string): Promise<readonly McpIndexSummary[]> {
+    const parsed = await this.callTool(ToolName.ListIndices, { index_pattern: indexPattern });
 
     // Tolerate both a bare array and an `{ indices: [...] }` wrapper.
     const rows: unknown[] = Array.isArray(parsed)
@@ -300,8 +307,8 @@ export class McpClientService {
    * `properties` into dotted paths, and default `searchable`/`aggregatable` to
    * `true` (the MCP mapping output does not report field capabilities).
    *
-   * The tool argument name `index` targets the v0.4.6 schema; confirm via
-   * `listTools()` if the server rejects it.
+   * The tool argument name `index` is VERIFIED against the live Elastic
+   * Elasticsearch MCP server v0.4.6 as `{ index }`.
    */
   async getMappings(indexPattern: string): Promise<ESIndexMapping> {
     const parsed = await this.callTool(ToolName.GetMappings, { index: indexPattern });
@@ -323,10 +330,12 @@ export class McpClientService {
    * @param queryDsl - A raw Elasticsearch Query DSL query body.
    *
    * @remarks
-   * The tool argument names (`index`, `queryBody`) target the Elastic
-   * Elasticsearch MCP server v0.4.6 schema and should be confirmed against the
-   * running server's `listTools()` output if the tool rejects them. Mapping of
-   * the response is best-effort and tolerant of missing fields.
+   * The tool argument names are VERIFIED against the live Elastic Elasticsearch
+   * MCP server v0.4.6 as `{ index, query_body }` (note the snake_case
+   * `query_body`, which carries the full ES Query DSL body — `query`, `size`,
+   * `from`, `sort`, etc.). The server also accepts an optional `fields: string[]`
+   * to restrict the returned source fields; we intentionally do not send it.
+   * Mapping of the response is best-effort and tolerant of missing fields.
    */
   async search(
     indexPattern: string,
@@ -334,7 +343,7 @@ export class McpClientService {
   ): Promise<QueryExecutionResult> {
     const parsed = await this.callTool(ToolName.Search, {
       index: indexPattern,
-      queryBody: queryDsl,
+      query_body: queryDsl,
     });
 
     const body = isRecord(parsed) ? parsed : {};
