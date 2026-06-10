@@ -37,15 +37,6 @@ const REQUEST_TIMEOUT_MS = 30000;
 /** Short timeout for the one-shot `/ping` reachability probe in `beforeAll`. */
 const PROBE_TIMEOUT_MS = 3000;
 /**
- * Bounded functional-readiness window. `/ping` returning 200 does NOT guarantee
- * the streamable-HTTP `/mcp` endpoint completes the MCP initialize handshake (a
- * "half-up" container), and {@link McpClientService.connect} is not itself
- * time-bounded — so we gate on a REAL search resolving within this window.
- * Anything slower/erroring → the suite SKIPS rather than hanging to the jest
- * timeout and failing CI.
- */
-const READINESS_TIMEOUT_MS = 8000;
-/**
  * Jest hook/test timeout. Comfortably larger than {@link PROBE_TIMEOUT_MS} so the
  * no-container path (probe times out → tests no-op) never trips jest's default
  * 5s per-test timeout, and large enough to allow a real live `search` round-trip.
@@ -87,44 +78,21 @@ describe('McpClientService.search (LIVE smoke)', () => {
   beforeAll(async () => {
     service = new McpClientService(makeConfigService(), makeLogger());
 
-    // 1. Cheap `/ping` reachability, raced against a hard timer so a hung/blocked
-    //    socket cannot outlast PROBE_TIMEOUT_MS even if the AbortController is slow
-    //    to settle — the no-container path must be fast and deterministic.
+    // Reachability gate: a plain `/ping` with a generous timeout. If `/ping`
+    // answers, treat the container as up and let the tests run. We deliberately
+    // do NOT pre-flight a real search here — if the container is reachable but a
+    // search fails, that's a genuine signal the tests should surface by FAILING,
+    // not something to mask with a skip. Skip means "container down", nothing more.
     const controller = new AbortController();
-    const ping = fetch(MCP_PING_URL, { signal: controller.signal })
-      .then((response) => response.ok)
-      .catch(() => false);
-    const pingTimer = new Promise<boolean>((resolve) => {
-      const timer = setTimeout(() => {
-        controller.abort();
-        resolve(false);
-      }, PROBE_TIMEOUT_MS);
-      timer.unref();
-    });
-    if (!(await Promise.race([ping, pingTimer]))) {
+    const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+    timer.unref();
+    try {
+      const response = await fetch(MCP_PING_URL, { signal: controller.signal });
+      containerUp = response.ok;
+    } catch {
       containerUp = false;
-      return;
-    }
-
-    // 2. Functional readiness. `/ping` can return 200 while the streamable-HTTP
-    //    `/mcp` endpoint never completes the MCP handshake (half-up container),
-    //    which would hang an unbounded `search`/`connect`. So gate on a REAL,
-    //    race-bounded round-trip: treat the container as usable only if a tiny
-    //    match-all search actually resolves; any error/timeout → skip (never hang).
-    const ready = service
-      .search(INDEX_PATTERN, { query: { match_all: {} }, size: 1 })
-      .then(() => true)
-      .catch(() => false);
-    const readyTimer = new Promise<boolean>((resolve) => {
-      const timer = setTimeout(() => resolve(false), READINESS_TIMEOUT_MS);
-      timer.unref();
-    });
-    containerUp = await Promise.race([ready, readyTimer]);
-
-    // Half-up/unreachable: tear down the (possibly half-open) connection now so the
-    // dangling readiness round-trip can't leak a socket into the rest of the run.
-    if (!containerUp) {
-      await service.close().catch(() => undefined);
+    } finally {
+      clearTimeout(timer);
     }
   }, JEST_TIMEOUT_MS);
 
