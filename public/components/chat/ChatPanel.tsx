@@ -32,7 +32,12 @@ export const ChatPanel: React.FC = () => {
       data-test-subj="queryCopilotChatPanel"
       css={css({ display: 'flex', flexDirection: 'column', height: '100%' })}
     >
-      <EuiFlexGroup alignItems="center" gutterSize="s" responsive={false}>
+      <EuiFlexGroup
+        alignItems="center"
+        gutterSize="s"
+        responsive={false}
+        css={css({ flexGrow: 0, flexShrink: 0 })}
+      >
         <EuiFlexItem grow={false}>
           <EuiIcon type="discuss" />
         </EuiFlexItem>
