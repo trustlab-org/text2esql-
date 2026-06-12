@@ -47,25 +47,20 @@ export const stateContainerStyles = ({ euiTheme }: UseEuiTheme): SerializedStyle
   });
 
 /**
- * Scroll container for the results table: scrolls on both axes within a bounded
- * height, draws a token-themed border, and keeps the table header row pinned to
- * the top while the body scrolls underneath it.
+ * Scroll container for the results table.
+ *
+ * Vertical scrolling is intentionally NOT bounded here: the table renders at its
+ * natural height and the single right-column scroll (in AppShell) handles
+ * vertical scrolling for the editor + output together, so it ends exactly at the
+ * last row with no trailing dead space. Only HORIZONTAL overflow scrolls within
+ * this box (the result set can have many columns).
  */
 export const tableScrollStyles = ({ euiTheme }: UseEuiTheme): SerializedStyles =>
   css({
     overflowX: 'auto',
-    overflowY: 'auto',
-    maxHeight: `${TABLE_MAX_HEIGHT}px`,
-    minHeight: 0,
     width: '100%',
     border: `1px solid ${euiTheme.border.color}`,
     borderRadius: euiTheme.border.radius.medium,
-    '.euiTableHeaderCell': {
-      position: 'sticky',
-      top: 0,
-      zIndex: 1,
-      background: euiTheme.colors.emptyShade,
-    },
   });
 
 /**
