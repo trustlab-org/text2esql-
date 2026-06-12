@@ -29,28 +29,20 @@ export const KQLEditorPanel: React.FC = () => {
 
   return (
     <EuiPanel paddingSize="m" data-test-subj="queryCopilotKqlEditorPanel">
-      <EuiFlexGroup
-        alignItems="center"
-        justifyContent="spaceBetween"
-        gutterSize="s"
-        responsive={false}
-      >
+      <EuiFlexGroup alignItems="center" gutterSize="s" responsive={false}>
         <EuiFlexItem grow={false}>
-          <EuiFlexGroup alignItems="center" gutterSize="s" responsive={false}>
-            <EuiFlexItem grow={false}>
-              <EuiIcon type="editorCodeBlock" />
-            </EuiFlexItem>
-            <EuiFlexItem grow={false}>
-              <EuiTitle size="xs">
-                <h2>KQL Editor</h2>
-              </EuiTitle>
-            </EuiFlexItem>
-          </EuiFlexGroup>
+          <EuiIcon type="editorCodeBlock" />
         </EuiFlexItem>
         <EuiFlexItem grow={false}>
-          <EditorToolbar isEditing={isEditing} onToggleEdit={() => setIsEditing((v) => !v)} />
+          <EuiTitle size="xs">
+            <h2 css={{ whiteSpace: 'nowrap' }}>KQL Editor</h2>
+          </EuiTitle>
         </EuiFlexItem>
       </EuiFlexGroup>
+
+      <EuiSpacer size="s" />
+
+      <EditorToolbar isEditing={isEditing} onToggleEdit={() => setIsEditing((v) => !v)} />
 
       <EuiSpacer size="s" />
 
