@@ -73,12 +73,12 @@ export const AppShell: React.FC = () => {
                 direction="column"
                 gutterSize="m"
                 responsive={false}
-                css={css({ overflowY: 'auto' })}
+                css={css({ flexGrow: 0 })}
               >
                 <EuiFlexItem grow={false}>
                   <KQLEditorPanel />
                 </EuiFlexItem>
-                <EuiFlexItem grow>
+                <EuiFlexItem grow={false}>
                   <QueryOutputPanel />
                 </EuiFlexItem>
               </EuiFlexGroup>
