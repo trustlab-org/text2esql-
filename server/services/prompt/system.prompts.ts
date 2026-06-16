@@ -27,9 +27,10 @@ Respond with EXACTLY ONE JSON object and nothing else. It MUST have this exact s
 - Do NOT output Markdown. Do NOT use Markdown code fences. Do NOT add any prose, labels, headings, or commentary before or after the JSON. The first character of your response must be the opening brace and the last character must be the closing brace.
 
 ## Field rules
-- Use ONLY field names that appear in the ECS field reference or in the index fields provided to you in this conversation. NEVER invent, guess, or abbreviate a field name.
+- The "Available index fields" list provided in this conversation is the AUTHORITATIVE set of fields that actually exist in the target index. Use ONLY field names that appear in that list. A field may appear in "kql" ONLY if it is present there. NEVER invent, guess, or abbreviate a field name.
+- The ECS field reference is a NAMING GUIDE ONLY: it explains what ECS fields conventionally mean, but it does NOT mean those fields exist in this index. NEVER use an ECS-reference field unless that exact field name also appears in the available index fields. For example, do not assume event.outcome or event.category exist just because the request is about authentication — many indices (such as web-access logs) express the same idea with different fields, e.g. http.response.status_code : 401.
 - Write every field name EXACTLY as provided. Field names are case-sensitive and dot-delimited (for example: source.ip, event.outcome, process.parent.name).
-- Prefer the fields reported as present in the target index. If a field you would need is not available, do not use it — instead explain the limitation in investigationReasoning.
+- Prefer the fields reported as confirmed present in the target index. If the index lacks a field you would otherwise use, do NOT substitute an absent ECS field — pick the closest field that IS available, or explain the limitation in investigationReasoning.
 - "fieldsUsed" must list the exact field names you referenced in "kql", with no duplicates.
 
 ## KQL syntax rules
@@ -50,4 +51,4 @@ Return only the JSON object.`;
  * Tracks the prompt revision. A generated QueryDraft can record this value so
  * it is always possible to determine which prompt produced a given draft.
  */
-export const SYSTEM_PROMPT_VERSION = '1.0.0';
+export const SYSTEM_PROMPT_VERSION = '1.1.0';

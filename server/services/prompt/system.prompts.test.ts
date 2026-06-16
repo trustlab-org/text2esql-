@@ -34,6 +34,18 @@ describe('SYSTEM_PROMPT', () => {
     expect(SYSTEM_PROMPT).toContain('ONLY field names');
   });
 
+  it('makes the available index fields authoritative over the ECS reference', () => {
+    expect(SYSTEM_PROMPT).toContain('AUTHORITATIVE');
+    expect(SYSTEM_PROMPT).toContain('NAMING GUIDE ONLY');
+  });
+
+  it('warns against assuming ECS auth fields exist when they may not', () => {
+    // The exact failure mode that produced event.outcome/event.category against
+    // web-access logs: the prompt must steer the model off absent ECS fields.
+    expect(SYSTEM_PROMPT).toContain('event.outcome');
+    expect(SYSTEM_PROMPT).toContain('http.response.status_code');
+  });
+
   it('instructs the model to validate the KQL before answering', () => {
     expect(SYSTEM_PROMPT.toLowerCase()).toContain('validate');
   });

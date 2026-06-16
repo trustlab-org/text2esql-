@@ -108,9 +108,10 @@ export class PromptBuilder {
 
   /** Renders the relevant ECS fields as a reference section for the system prompt. */
   private formatEcsFieldReference(fields: readonly ECSField[]): string {
-    const header = '## ECS field reference';
+    const header =
+      '## ECS field reference (naming guide only — these fields are NOT guaranteed to exist in the target index; only use one if it also appears in the available index fields)';
     if (fields.length === 0) {
-      return `${header}\nNo specific ECS fields were identified for this investigation; rely on the available index fields.`;
+      return `${header}\nNo specific ECS fields were identified for this investigation; rely entirely on the available index fields.`;
     }
     const lines = fields.map((field) => `- ${field.name} (${field.type}): ${field.description}`);
     return `${header}\n${lines.join('\n')}`;
@@ -215,11 +216,11 @@ export class PromptBuilder {
 
   /** Renders the target index schema: confirmed-present fields and available fields. */
   private formatSchemaContext(context: SchemaContext): string {
-    const header = '## Target index schema';
+    const header = '## Target index schema (AUTHORITATIVE — build the query from these fields only)';
 
     const overlapValue = context.fieldOverlap.length
       ? context.fieldOverlap.join(', ')
-      : 'none of the relevant ECS fields were found in this index';
+      : 'none — none of the ECS fields typical for this investigation exist in this index, so do NOT use them; build the query from the available index fields below instead';
     const overlapLine = `Fields confirmed present in the index (prefer these): ${overlapValue}`;
 
     let availableLine: string;
@@ -227,7 +228,14 @@ export class PromptBuilder {
       availableLine = 'Available index fields: (index mapping unavailable)';
     } else {
       const total = context.availableIndexFields.length;
-      const shown = context.availableIndexFields.slice(0, MAX_AVAILABLE_FIELDS_RENDERED);
+      // Surface confirmed-present (overlap) fields first so they are never lost
+      // to truncation when the index has more fields than the render cap.
+      const overlapSet = new Set(context.fieldOverlap);
+      const prioritized = [
+        ...context.availableIndexFields.filter((f) => overlapSet.has(f)),
+        ...context.availableIndexFields.filter((f) => !overlapSet.has(f)),
+      ];
+      const shown = prioritized.slice(0, MAX_AVAILABLE_FIELDS_RENDERED);
       availableLine = `Available index fields (${total} total): ${shown.join(', ')}`;
       if (total > MAX_AVAILABLE_FIELDS_RENDERED) {
         availableLine += ` … (showing first ${MAX_AVAILABLE_FIELDS_RENDERED} of ${total})`;

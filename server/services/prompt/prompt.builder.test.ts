@@ -159,6 +159,58 @@ describe('PromptBuilder', () => {
     });
   });
 
+  describe('index-field grounding', () => {
+    it('labels the ECS reference as a non-authoritative naming guide', () => {
+      const builder = new PromptBuilder();
+      const result = builder.buildGenerationPrompt(makeIntent(), makeContext(), [
+        userMsg('show failed logins for the administrator account'),
+      ]);
+
+      expect(result.systemPrompt).toContain('naming guide only');
+      expect(result.userMessage).toContain('AUTHORITATIVE');
+    });
+
+    it('tells the model not to use absent ECS fields when no overlap exists', () => {
+      const builder = new PromptBuilder();
+      // The real-world failure: ECS auth fields are relevant but absent from the
+      // index (web-access logs), so fieldOverlap is empty.
+      const context: SchemaContext = {
+        relevantECSFields: ECSRegistry.getFieldsByInvestigationType('brute_force'),
+        availableIndexFields: ['@timestamp', 'http.response.status_code', 'source.ip', 'url.path'],
+        fieldOverlap: [],
+      };
+
+      const result = builder.buildGenerationPrompt(makeIntent(), context, [
+        userMsg('show failed login attempts'),
+      ]);
+
+      expect(result.userMessage).toContain('do NOT use them');
+      expect(result.userMessage).toContain('http.response.status_code');
+    });
+
+    it('lists confirmed-present fields first so truncation cannot hide them', () => {
+      const builder = new PromptBuilder();
+      // 130 noise fields + the relevant field placed last alphabetically; without
+      // prioritization it would fall outside the first-100 render window.
+      const noise = Array.from({ length: 130 }, (_, i) => `zzz_field_${i}`);
+      const context: SchemaContext = {
+        relevantECSFields: ECSRegistry.getFieldsByInvestigationType('brute_force'),
+        availableIndexFields: [...noise, 'http.response.status_code'],
+        fieldOverlap: ['http.response.status_code'],
+      };
+
+      const result = builder.buildGenerationPrompt(makeIntent(), context, [
+        userMsg('show failed login attempts'),
+      ]);
+
+      // The overlap field is surfaced in the rendered (truncated) available list.
+      const availableSection = result.userMessage
+        .split('Available index fields')[1]
+        ?.split('\n')[0];
+      expect(availableSection).toContain('http.response.status_code');
+    });
+  });
+
   describe('schema truncation', () => {
     it('reports truncation when the available index field list exceeds the render cap', () => {
       const builder = new PromptBuilder();
