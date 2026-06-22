@@ -1,5 +1,6 @@
 import type { ElasticsearchClient } from '@kbn/core/server';
 import type { NavigationServerPluginSetup } from '@kbn/navigation-plugin/server';
+import type { RequestCredentials } from '../common/types';
 import type { LoggerService } from './services/observability/logger.service';
 import type { MetricsService } from './services/observability/metrics.service';
 import type { ConfigService } from './services/config/config.service';
@@ -43,9 +44,15 @@ export interface QueryCopilotContext {
   /**
    * Builds a {@link QueryPipeline} bound to a request-scoped Elasticsearch
    * client. Invoked per request so index-mapping reads honour the caller's
-   * permissions; all other collaborators are shared singletons.
+   * permissions. When `credentials` are supplied the provider router and
+   * correction engine are also rebuilt per request from the caller's own LLM
+   * API keys; otherwise the shared boot-time singletons are used. All remaining
+   * collaborators (cache, normalizer, etc.) are shared singletons.
    */
-  readonly createPipeline: (esClient: ElasticsearchClient) => QueryPipeline;
+  readonly createPipeline: (
+    esClient: ElasticsearchClient,
+    credentials?: RequestCredentials
+  ) => QueryPipeline;
   /**
    * MCP-backed query-execution provider, present only when
    * `queryCopilot.mcp.searchEnabled` is `true`. When present it REPLACES the

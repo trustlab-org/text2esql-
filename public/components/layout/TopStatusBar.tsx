@@ -28,9 +28,10 @@ import { CostBadge } from '../statusbar/CostBadge';
  */
 interface TopStatusBarProps {
   onOpenBenchmark?: () => void;
+  onOpenSettings?: () => void;
 }
 
-export const TopStatusBar: React.FC<TopStatusBarProps> = ({ onOpenBenchmark }) => {
+export const TopStatusBar: React.FC<TopStatusBarProps> = ({ onOpenBenchmark, onOpenSettings }) => {
   const { euiTheme } = useEuiTheme();
 
   const logoCss = css({
@@ -110,6 +111,18 @@ export const TopStatusBar: React.FC<TopStatusBarProps> = ({ onOpenBenchmark }) =
                   data-test-subj="queryCopilotOpenBenchmark"
                 >
                   Benchmark
+                </EuiButtonEmpty>
+              </EuiFlexItem>
+            )}
+            {onOpenSettings && (
+              <EuiFlexItem grow={false}>
+                <EuiButtonEmpty
+                  size="s"
+                  iconType="gear"
+                  onClick={onOpenSettings}
+                  data-test-subj="queryCopilotOpenSettings"
+                >
+                  Settings
                 </EuiButtonEmpty>
               </EuiFlexItem>
             )}

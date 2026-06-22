@@ -3,6 +3,8 @@ import type {
   QueryGenerationResponse,
   QueryExecutionResponse,
   TimeRange,
+  TokenEstimateProviderSpec,
+  TokenEstimateResponse,
 } from '../../common/types';
 import { PLUGIN_ROUTE_PREFIX } from '../../common';
 import { ApiClient } from './api.client';
@@ -22,6 +24,20 @@ export class QueryApiService extends ApiClient {
       kql,
       indexPattern,
       ...(timeRange ? { timeRange } : {}),
+    });
+  }
+
+  /**
+   * Pure per-provider token/cost estimate for a candidate query (no LLM call,
+   * carries no API key). Returns one entry per requested provider.
+   */
+  public async estimateTokens(
+    query: string,
+    providers: readonly TokenEstimateProviderSpec[]
+  ): Promise<TokenEstimateResponse> {
+    return this.post<TokenEstimateResponse>(`${PLUGIN_ROUTE_PREFIX}/token-estimate`, {
+      query,
+      providers,
     });
   }
 }

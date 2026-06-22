@@ -105,7 +105,9 @@ describe('registerQueryRoutes handler', () => {
     expect(typeof okArg.headers['X-Request-ID']).toBe('string');
     expect(okArg.headers['X-Request-ID'].length).toBeGreaterThan(0);
 
-    expect(createPipeline).toHaveBeenCalledWith(esClient);
+    // No credentials in the request body → undefined is forwarded (back-compat:
+    // the pipeline falls back to the boot-time singleton router).
+    expect(createPipeline).toHaveBeenCalledWith(esClient, undefined);
 
     expect(execute).toHaveBeenCalledTimes(1);
     const pipelineRequest = execute.mock.calls[0][0];

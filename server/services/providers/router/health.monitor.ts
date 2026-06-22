@@ -53,6 +53,22 @@ function initialRecord(): MutableHealthRecord {
 }
 
 // ---------------------------------------------------------------------------
+// IHealthMonitor
+//
+// The narrow surface the ProviderRouter actually consumes. Extracted so the
+// router can be driven by either the real interval-based HealthMonitor or the
+// no-op NullHealthMonitor used by per-request routers (where boot-time health
+// state is irrelevant). Contains AT LEAST the members the router calls.
+// ---------------------------------------------------------------------------
+
+export interface IHealthMonitor {
+  /** Returns the current per-provider health snapshot. */
+  getHealthStates(): ReadonlyMap<ProviderName, ProviderHealthState>;
+  /** Forces (or no-ops) an immediate health check for a single provider. */
+  checkProvider(name: ProviderName): Promise<ProviderHealthState | void>;
+}
+
+// ---------------------------------------------------------------------------
 // HealthMonitor
 //
 // Responsibilities:
@@ -66,7 +82,7 @@ function initialRecord(): MutableHealthRecord {
 // Thread safety: Node.js is single-threaded; no locking needed.
 // ---------------------------------------------------------------------------
 
-export class HealthMonitor {
+export class HealthMonitor implements IHealthMonitor {
   private readonly providers: ReadonlyMap<ProviderName, ILLMProvider>;
   private readonly config: HealthMonitorConfig;
   private readonly logger: Logger;

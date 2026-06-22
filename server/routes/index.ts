@@ -4,6 +4,7 @@ import { registerHealthRoutes } from './health.routes';
 import { registerMetricsRoutes } from './metrics.routes';
 import { registerProviderRoutes } from './provider.routes';
 import { registerQueryRoutes } from './query.routes';
+import { registerTokenRoutes } from './token.routes';
 import { registerExecutionRoutes } from './execution.routes';
 import { registerBenchmarkRoutes } from './benchmark.routes';
 
@@ -19,6 +20,7 @@ export function defineRoutes(router: IRouter, context: QueryCopilotContext): voi
   registerMetricsRoutes(router, context);
   registerProviderRoutes(router, context);
   registerQueryRoutes(router, context);
+  registerTokenRoutes(router, context);
   registerExecutionRoutes(router, context);
   registerBenchmarkRoutes(router, context);
 }

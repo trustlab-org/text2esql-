@@ -22,10 +22,21 @@ export { OpenAIProvider } from './openai';
 export type { OpenAIConfig } from './openai';
 
 // Router
-export { ProviderRouter, HealthMonitor, PriorityRoutingStrategy } from './router';
+export {
+  ProviderRouter,
+  HealthMonitor,
+  NullHealthMonitor,
+  PriorityRoutingStrategy,
+  FixedOrderRoutingStrategy,
+} from './router';
 export type {
   ProviderRoutingState,
   HealthMonitorConfig,
+  IHealthMonitor,
   IRoutingStrategy,
   ProviderHealthState,
 } from './router';
+
+// Per-request provider construction
+export { ProviderFactory } from './provider.factory';
+export { buildRequestRouter } from './request.router.factory';

@@ -54,6 +54,26 @@ describe('QueryApiService', () => {
     expect(sentBody.indexPattern).not.toBe('*');
   });
 
+  it('estimateTokens posts query + providers to the token-estimate endpoint', async () => {
+    const http = {
+      post: jest.fn().mockResolvedValue({ estimates: [] }),
+      get: jest.fn(),
+    };
+    const svc = new QueryApiService(http as unknown as HttpSetup);
+
+    await svc.estimateTokens('failed logins', [
+      { provider: 'anthropic', model: 'claude-x' },
+      { provider: 'openai' },
+    ]);
+
+    expect(http.post).toHaveBeenCalledWith('/api/query_copilot/token-estimate', {
+      body: JSON.stringify({
+        query: 'failed logins',
+        providers: [{ provider: 'anthropic', model: 'claude-x' }, { provider: 'openai' }],
+      }),
+    });
+  });
+
   it('rejects with ApiError on a failed request', async () => {
     const http = {
       post: jest.fn().mockRejectedValue({ response: { status: 503 }, body: { message: 'down' } }),

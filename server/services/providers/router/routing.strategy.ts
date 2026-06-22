@@ -83,3 +83,32 @@ export class PriorityRoutingStrategy implements IRoutingStrategy {
     return entries.map((e) => e.name);
   }
 }
+
+// ---------------------------------------------------------------------------
+// FixedOrderRoutingStrategy
+//
+// Orders providers by an explicit, caller-supplied sequence — used by the
+// per-request router so the caller's primary/fallback choice is honoured
+// exactly. Unlike PriorityRoutingStrategy it IGNORES role tiers, priority, and
+// health state for ordering purposes: it returns the configured providers in
+// their given order, filtered to those actually present in the provider map.
+//
+// (The ProviderRouter still applies its own healthy/unhealthy tiering on top of
+// whatever order() returns, but with a NullHealthMonitor every provider reads
+// as optimistically healthy, so this fixed order is preserved end-to-end.)
+// ---------------------------------------------------------------------------
+
+export class FixedOrderRoutingStrategy implements IRoutingStrategy {
+  private readonly order_: readonly ProviderName[];
+
+  constructor(order: readonly ProviderName[]) {
+    this.order_ = order;
+  }
+
+  public order(
+    providers: ReadonlyMap<ProviderName, ILLMProvider>,
+    _healthStates: ReadonlyMap<ProviderName, ProviderHealthState>
+  ): ProviderName[] {
+    return this.order_.filter((name) => providers.has(name));
+  }
+}

@@ -2,6 +2,8 @@ import type { QueryLanguage } from '../constants';
 import type { ProviderName } from './provider.types';
 import type { ConversationMessage, QueryPipelineResult } from './pipeline.types';
 import type { QueryExecutionResult } from './execution.types';
+import type { RequestCredentials } from './credentials.types';
+import type { TokenEstimate, CostEstimate } from './cost.types';
 
 /**
  * Shared HTTP API contract between the Query Copilot browser client and server.
@@ -20,10 +22,41 @@ export interface QueryGenerationRequest {
   readonly requestedLanguage?: QueryLanguage | null;
   readonly conversationHistory?: readonly ConversationMessage[];
   readonly preferredProvider?: ProviderName;
+  /**
+   * Per-request LLM credentials supplied by the caller (the user's own primary +
+   * optional fallback keys). When present, the server builds providers from
+   * these rather than the boot-time kibana.yml config. Keys are never logged.
+   */
+  readonly credentials?: RequestCredentials;
 }
 
 /** Response from `POST /api/query_copilot/generate` — the full pipeline result. */
 export type QueryGenerationResponse = QueryPipelineResult;
+
+/** A single provider entry in a `POST /api/query_copilot/token-estimate` request. */
+export interface TokenEstimateProviderSpec {
+  readonly provider: ProviderName;
+  readonly model?: string;
+}
+
+/** Request body for `POST /api/query_copilot/token-estimate`. */
+export interface TokenEstimateRequest {
+  readonly query: string;
+  readonly providers: readonly TokenEstimateProviderSpec[];
+}
+
+/** A single provider's estimate in a token-estimate response. */
+export interface TokenEstimateEntry {
+  readonly provider: ProviderName;
+  readonly model: string;
+  readonly tokenEstimate: TokenEstimate;
+  readonly costEstimate: CostEstimate;
+}
+
+/** Response from `POST /api/query_copilot/token-estimate` (pure estimate, no LLM call). */
+export interface TokenEstimateResponse {
+  readonly estimates: readonly TokenEstimateEntry[];
+}
 
 /**
  * Response from executing a generated KQL query against an index.

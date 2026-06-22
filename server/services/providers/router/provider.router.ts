@@ -8,7 +8,7 @@ import {
 } from '../errors';
 import type { LoggerService } from '../../observability';
 import type { IRoutingStrategy, ProviderHealthState } from './routing.strategy';
-import type { HealthMonitor } from './health.monitor';
+import type { IHealthMonitor } from './health.monitor';
 
 // ---------------------------------------------------------------------------
 // ProviderRoutingState — public snapshot for health endpoints and observability
@@ -64,7 +64,7 @@ interface RouteAttempt {
 
 export class ProviderRouter {
   private readonly providers: ReadonlyMap<ProviderName, ILLMProvider>;
-  private readonly healthMonitor: HealthMonitor;
+  private readonly healthMonitor: IHealthMonitor;
   private readonly strategy: IRoutingStrategy;
   private readonly logger: LoggerService;
 
@@ -73,7 +73,7 @@ export class ProviderRouter {
 
   constructor(
     providers: ReadonlyMap<ProviderName, ILLMProvider>,
-    healthMonitor: HealthMonitor,
+    healthMonitor: IHealthMonitor,
     strategy: IRoutingStrategy,
     logger: LoggerService
   ) {

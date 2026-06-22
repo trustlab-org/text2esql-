@@ -21,25 +21,16 @@ import {
   ProviderRouter,
   HealthMonitor,
   PriorityRoutingStrategy,
-  GeminiProvider,
-  GroqProvider,
-  OllamaProvider,
-  AnthropicProvider,
-  OpenAIProvider,
+  ProviderFactory,
+  buildRequestRouter,
   TokenEstimatorService,
   CostEstimatorService,
 } from './services';
 import type { ILLMProvider } from './services';
 import type { ProviderName } from '../common';
-import { PROVIDER_NAMES, PROVIDER_CONTEXT_WINDOW_TOKENS } from '../common';
+import { PROVIDER_NAMES } from '../common';
+import type { ProviderCredential, RequestCredentials } from '../common/types';
 import { defineRoutes } from './routes';
-import type {
-  GeminiConfig,
-  GroqConfig,
-  OllamaConfig,
-  AnthropicConfig,
-  OpenAIConfig,
-} from './services';
 import { CacheService, RedisClientFactory } from './services/cache';
 import { QueryNormalizer, IntentExtractorService } from './services/intent';
 import { ESMappingFetcher, ECSContextMapper } from './services/schema';
@@ -173,23 +164,46 @@ export class QueryCopilotPlugin
     // A QueryPipeline is built per request, bound to the request-scoped ES client
     // (so index-mapping reads honour the requesting user's permissions). The other
     // collaborators above are stateless singletons created once here.
-    const createPipeline = (esClient: ElasticsearchClient): QueryPipeline =>
-      new QueryPipeline(
+    // When the request carries the caller's own credentials, the router and
+    // correction engine are rebuilt per request from those keys (request-scoped,
+    // discarded afterwards). Without credentials the shared boot-time singletons
+    // are used, preserving back-compat. API keys flow only through the factory
+    // into the providers and are never logged here.
+    const maxCorrectionRetries = this.configService.getMaxCorrectionRetries();
+    const createPipeline = (
+      esClient: ElasticsearchClient,
+      credentials?: RequestCredentials
+    ): QueryPipeline => {
+      const requestRouter = credentials
+        ? buildRequestRouter(credentials, loggerService)
+        : providerRouter;
+      const requestCorrectionEngine = credentials
+        ? new CorrectionEngine(
+            new CorrectionPromptBuilder(),
+            requestRouter,
+            validator,
+            loggerService,
+            maxCorrectionRetries
+          )
+        : correctionEngine;
+
+      return new QueryPipeline(
         cacheService,
         normalizer,
         intentExtractor,
         new ESMappingFetcher(esClient, esMappingLogger),
         ecsMapper,
         promptBuilder,
-        providerRouter,
+        requestRouter,
         validator,
-        correctionEngine,
+        requestCorrectionEngine,
         tokenEstimator,
         costEstimator,
         loggerService,
         metricsService,
         mcpMappingProvider
       );
+    };
 
     // ── Plugin context ────────────────────────────────────────────────────────
     const pluginContext: QueryCopilotContext = {
@@ -318,72 +332,60 @@ export class QueryCopilotPlugin
    */
   private buildProviderMap(): ReadonlyMap<ProviderName, ILLMProvider> {
     const map = new Map<ProviderName, ILLMProvider>();
+    const factory = new ProviderFactory();
+
+    // Each enabled entry is turned into a per-provider credential and handed to
+    // the SAME factory used for per-request providers, so the construction logic
+    // (model defaults, maxTokens/timeoutMs/temperature) lives in one place. The
+    // enabled/apiKey gating below is unchanged from before.
+    const register = (name: ProviderName, cred: ProviderCredential): void => {
+      map.set(name, factory.createProvider(cred));
+      this.logger.info(`queryCopilot: registered ${name} provider`);
+    };
 
     const geminiCfg = this.configService.getGeminiConfig();
     if (geminiCfg.enabled && geminiCfg.apiKey) {
-      const cfg: GeminiConfig = {
+      register(PROVIDER_NAMES.GEMINI, {
+        provider: PROVIDER_NAMES.GEMINI,
         apiKey: geminiCfg.apiKey,
         model: geminiCfg.model,
-        maxTokens: 8192,
-        timeoutMs: 30_000,
-        temperature: 0.2,
-      };
-      map.set(PROVIDER_NAMES.GEMINI, new GeminiProvider(cfg));
-      this.logger.info('queryCopilot: registered Gemini provider');
+      });
     }
 
     const groqCfg = this.configService.getGroqConfig();
     if (groqCfg.enabled && groqCfg.apiKey) {
-      const cfg: GroqConfig = {
+      register(PROVIDER_NAMES.GROQ, {
+        provider: PROVIDER_NAMES.GROQ,
         apiKey: groqCfg.apiKey,
         model: groqCfg.model,
-        maxTokens: 8192,
-        contextWindowTokens: PROVIDER_CONTEXT_WINDOW_TOKENS.groq,
-        timeoutMs: 30_000,
-        temperature: 0.2,
-      };
-      map.set(PROVIDER_NAMES.GROQ, new GroqProvider(cfg));
-      this.logger.info('queryCopilot: registered Groq provider');
+      });
     }
 
     const ollamaCfg = this.configService.getOllamaConfig();
     if (ollamaCfg.enabled) {
-      const cfg: OllamaConfig = {
-        endpoint: ollamaCfg.endpoint,
+      register(PROVIDER_NAMES.OLLAMA, {
+        provider: PROVIDER_NAMES.OLLAMA,
         model: ollamaCfg.model,
-        maxTokens: 4096,
-        timeoutMs: 120_000,
-        temperature: 0.2,
-      };
-      map.set(PROVIDER_NAMES.OLLAMA, new OllamaProvider(cfg));
-      this.logger.info('queryCopilot: registered Ollama provider');
+        endpoint: ollamaCfg.endpoint,
+      });
     }
 
     const anthropicCfg = this.configService.getAnthropicConfig();
     if (anthropicCfg.enabled && anthropicCfg.apiKey) {
-      const cfg: AnthropicConfig = {
+      register(PROVIDER_NAMES.ANTHROPIC, {
+        provider: PROVIDER_NAMES.ANTHROPIC,
         apiKey: anthropicCfg.apiKey,
         model: anthropicCfg.model,
-        maxTokens: 8192,
-        timeoutMs: 60_000,
-        temperature: 0.2,
-        anthropicVersion: '2023-06-01',
-      };
-      map.set(PROVIDER_NAMES.ANTHROPIC, new AnthropicProvider(cfg));
-      this.logger.info('queryCopilot: registered Anthropic provider');
+      });
     }
 
     const openaiCfg = this.configService.getOpenAIConfig();
     if (openaiCfg.enabled && openaiCfg.apiKey) {
-      const cfg: OpenAIConfig = {
+      register(PROVIDER_NAMES.OPENAI, {
+        provider: PROVIDER_NAMES.OPENAI,
         apiKey: openaiCfg.apiKey,
         model: openaiCfg.model,
-        maxTokens: 8192,
-        timeoutMs: 60_000,
-        temperature: 0.2,
-      };
-      map.set(PROVIDER_NAMES.OPENAI, new OpenAIProvider(cfg));
-      this.logger.info('queryCopilot: registered OpenAI provider');
+      });
     }
 
     return map;

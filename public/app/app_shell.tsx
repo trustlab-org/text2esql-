@@ -5,12 +5,15 @@ import {
   EuiFlyout,
   EuiFlyoutHeader,
   EuiFlyoutBody,
+  EuiHorizontalRule,
   EuiTitle,
 } from '@elastic/eui';
 import { css } from '@emotion/react';
 
 import { TopStatusBar } from '../components/layout/TopStatusBar';
 import { BenchmarkPanel } from '../components/benchmark/BenchmarkPanel';
+import { ApiKeysPanel } from '../components/settings/ApiKeysPanel';
+import { TokenEstimatePanel } from '../components/settings/TokenEstimatePanel';
 import { SplitLayout } from '../components/layout/SplitLayout';
 import { ChatPanel } from '../components/chat/ChatPanel';
 import { KQLEditorPanel } from '../components/editor/KQLEditorPanel';
@@ -29,6 +32,7 @@ export const AppShell: React.FC = () => {
   const { dispatch } = useCopilot();
   const { providerApi } = useServices();
   const [benchmarkOpen, setBenchmarkOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Initialise provider state on mount: the task specifies calling
   // ProviderApiService.getProviders(); getHealth() is fetched alongside (an
@@ -63,7 +67,10 @@ export const AppShell: React.FC = () => {
         css={css({ height: '100vh' })}
       >
         <EuiFlexItem grow={false}>
-          <TopStatusBar onOpenBenchmark={() => setBenchmarkOpen(true)} />
+          <TopStatusBar
+            onOpenBenchmark={() => setBenchmarkOpen(true)}
+            onOpenSettings={() => setSettingsOpen(true)}
+          />
         </EuiFlexItem>
         <EuiFlexItem grow css={css({ minHeight: 0 })}>
           <SplitLayout
@@ -101,6 +108,26 @@ export const AppShell: React.FC = () => {
           </EuiFlyoutHeader>
           <EuiFlyoutBody>
             <BenchmarkPanel />
+          </EuiFlyoutBody>
+        </EuiFlyout>
+      )}
+
+      {settingsOpen && (
+        <EuiFlyout
+          onClose={() => setSettingsOpen(false)}
+          size="m"
+          aria-labelledby="queryCopilotSettingsFlyoutTitle"
+          data-test-subj="queryCopilotSettingsFlyout"
+        >
+          <EuiFlyoutHeader hasBorder>
+            <EuiTitle size="m">
+              <h2 id="queryCopilotSettingsFlyoutTitle">Provider Settings</h2>
+            </EuiTitle>
+          </EuiFlyoutHeader>
+          <EuiFlyoutBody>
+            <ApiKeysPanel onClose={() => setSettingsOpen(false)} />
+            <EuiHorizontalRule />
+            <TokenEstimatePanel />
           </EuiFlyoutBody>
         </EuiFlyout>
       )}

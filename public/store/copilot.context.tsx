@@ -9,6 +9,7 @@ import React, {
 import { DEFAULT_INDEX_PATTERN } from '../../common';
 import type { ConversationMessage } from '../../common/types';
 import { ApiError, useServices } from '../services';
+import { hasUsablePrimary, loadCredentials } from '../services/credentials.store';
 import {
   addMessage,
   queryError,
@@ -75,6 +76,22 @@ export function CopilotProvider({ children, indexPattern, sessionId }: CopilotPr
 
   const sendQuery = useCallback(
     async (query: string): Promise<void> => {
+      // Gate generation on the user supplying their OWN primary LLM key (there
+      // are no default keys). When no usable primary is configured, surface a
+      // guidance error and return WITHOUT calling the API or recording any
+      // assistant/user message.
+      const creds = loadCredentials();
+      if (!hasUsablePrimary(creds)) {
+        dispatch(
+          queryError({
+            message: 'Add your LLM API key in Settings (gear icon) before generating a query.',
+            statusCode: null,
+            requestId: null,
+          })
+        );
+        return;
+      }
+
       const userMsg: ConversationMessage = {
         id: generateId(),
         role: 'user',
@@ -93,6 +110,7 @@ export function CopilotProvider({ children, indexPattern, sessionId }: CopilotPr
           indexPattern: stateRef.current.indexPattern,
           sessionId: sessionIdRef.current,
           conversationHistory: stateRef.current.conversation,
+          credentials: creds ?? undefined,
         });
         const assistantMsg: ConversationMessage = {
           id: generateId(),

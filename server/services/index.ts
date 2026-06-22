@@ -26,11 +26,16 @@ export {
 export {
   ProviderRouter,
   HealthMonitor,
+  NullHealthMonitor,
   PriorityRoutingStrategy,
+  FixedOrderRoutingStrategy,
+  ProviderFactory,
+  buildRequestRouter,
 } from './providers';
 export type {
   ProviderRoutingState,
   HealthMonitorConfig,
+  IHealthMonitor,
   IRoutingStrategy,
   ProviderHealthState,
 } from './providers';
