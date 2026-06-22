@@ -19,27 +19,6 @@ const providerLiteral = schema.oneOf([
   schema.literal(PROVIDER_NAMES.OPENAI),
 ]);
 
-/**
- * A single provider credential supplied on the request. The apiKey is optional
- * (Ollama needs none) and bounded to a reasonable length; it is NEVER logged.
- */
-const providerCredentialSchema = schema.object({
-  provider: providerLiteral,
-  apiKey: schema.maybe(schema.string({ maxLength: 512 })),
-  model: schema.maybe(schema.string({ maxLength: 256 })),
-  endpoint: schema.maybe(schema.string({ maxLength: 512 })),
-});
-
-/**
- * Optional per-request LLM credentials: a mandatory primary provider and an
- * optional (nullable) fallback. When present these build a request-scoped
- * router from the caller's own keys instead of the boot-time config.
- */
-const requestCredentialsSchema = schema.object({
-  primary: providerCredentialSchema,
-  fallback: schema.maybe(schema.nullable(providerCredentialSchema)),
-});
-
 const conversationMessageSchema = schema.object({
   id: schema.string({ minLength: 1 }),
   role: schema.oneOf([
@@ -82,7 +61,6 @@ const queryGenerationRequestBodySchema = schema.object({
     defaultValue: [],
   }),
   preferredProvider: schema.maybe(providerLiteral),
-  credentials: schema.maybe(requestCredentialsSchema),
 });
 
 type QueryGenerationRequestBody = TypeOf<typeof queryGenerationRequestBodySchema>;
@@ -143,10 +121,35 @@ export function registerQueryRoutes(router: IRouter, context: QueryCopilotContex
         const esClient = coreCtx.elasticsearch.client.asCurrentUser;
 
         const body: QueryGenerationRequestBody = request.body;
-        // body.credentials carries the caller's own API keys when present; it is
-        // threaded into the pipeline factory (which builds a request-scoped
-        // router) but is NEVER logged.
-        const pipeline = context.createPipeline(esClient, body.credentials);
+
+        // Credentials are resolved server-side from the authenticated user's
+        // encrypted saved object (Stage 3) — they are NO LONGER read from the
+        // request body. The decrypted bundle is threaded into the pipeline
+        // factory (which builds a request-scoped router) but is NEVER logged.
+        const username = coreCtx.security.authc.getCurrentUser()?.username;
+        const credentialsService = username
+          ? context.getCredentialsService?.(request)
+          : undefined;
+        const credentials = credentialsService
+          ? (await credentialsService.getDecryptedCredentialsForUser(username!)) ?? undefined
+          : undefined;
+
+        // No usable key on file → fail fast with a friendly, actionable message
+        // rather than letting the pipeline surface a generic provider error.
+        if (!credentials) {
+          return response.customError({
+            // 422 Unprocessable Entity — the request is well-formed but the user
+            // has not configured a usable LLM key (see ERROR_CODE_TO_HTTP_STATUS).
+            statusCode: 422,
+            headers,
+            body: {
+              message: 'No LLM API key configured. Add your key in Settings.',
+              attributes: { requestId, errorCode: ERROR_CODES.PROVIDER_NOT_CONFIGURED },
+            },
+          });
+        }
+
+        const pipeline = context.createPipeline(esClient, credentials);
 
         const pipelineRequest: QueryGenerationRequest = {
           query: body.query,

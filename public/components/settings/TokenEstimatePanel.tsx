@@ -36,7 +36,7 @@ type EstimateStatus = 'idle' | 'loading' | 'done' | 'error';
  */
 export const TokenEstimatePanel: React.FC = () => {
   const { queryApi } = useServices();
-  const { credentials } = useCredentials();
+  const { status: credentialsStatus } = useCredentials();
   const { state } = useCopilot();
 
   const [status, setStatus] = useState<EstimateStatus>('idle');
@@ -50,32 +50,35 @@ export const TokenEstimatePanel: React.FC = () => {
   }, [state.conversation]);
 
   // The provider specs (with role) to estimate: primary first, then fallback.
+  // Sourced from the masked credential status (provider/model metadata only).
   const specs = useMemo<Array<{ role: 'Primary' | 'Fallback'; spec: TokenEstimateProviderSpec }>>(
     () => {
-      if (!credentials) {
+      if (!credentialsStatus) {
         return [];
       }
       const out: Array<{ role: 'Primary' | 'Fallback'; spec: TokenEstimateProviderSpec }> = [
         {
           role: 'Primary',
           spec: {
-            provider: credentials.primary.provider,
-            ...(credentials.primary.model ? { model: credentials.primary.model } : {}),
+            provider: credentialsStatus.primary.provider,
+            ...(credentialsStatus.primary.model ? { model: credentialsStatus.primary.model } : {}),
           },
         },
       ];
-      if (credentials.fallback) {
+      if (credentialsStatus.fallback) {
         out.push({
           role: 'Fallback',
           spec: {
-            provider: credentials.fallback.provider,
-            ...(credentials.fallback.model ? { model: credentials.fallback.model } : {}),
+            provider: credentialsStatus.fallback.provider,
+            ...(credentialsStatus.fallback.model
+              ? { model: credentialsStatus.fallback.model }
+              : {}),
           },
         });
       }
       return out;
     },
-    [credentials]
+    [credentialsStatus]
   );
 
   const runEstimate = useCallback(async (): Promise<void> => {
@@ -104,13 +107,15 @@ export const TokenEstimatePanel: React.FC = () => {
     }
   }, [queryApi, query, specs]);
 
-  // Estimate once on first open when a usable provider is configured.
+  // Estimate once on first open, as soon as a usable provider is configured.
+  // Credential status loads asynchronously, so this fires when specs first
+  // become available (status === 'idle' guards against re-running afterwards).
   useEffect(() => {
     if (status === 'idle' && specs.length > 0) {
       void runEstimate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [specs]);
 
   const columns: Array<EuiBasicTableColumn<EstimateRow>> = [
     { field: 'role', name: 'Role' },

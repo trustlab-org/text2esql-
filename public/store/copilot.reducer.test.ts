@@ -69,6 +69,7 @@ describe('copilotReducer', () => {
       queryResults: null,
       indexPattern: 'logs-*',
       timeRange: { from: 'now-24h', to: 'now' },
+      credentialsStatus: null,
     });
   });
 

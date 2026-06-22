@@ -29,7 +29,7 @@ import { setProviderState } from '../store/copilot.actions';
  * chat and editor implementations.
  */
 export const AppShell: React.FC = () => {
-  const { dispatch } = useCopilot();
+  const { dispatch, refreshCredentials } = useCopilot();
   const { providerApi } = useServices();
   const [benchmarkOpen, setBenchmarkOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -37,6 +37,8 @@ export const AppShell: React.FC = () => {
   // Initialise provider state on mount: the task specifies calling
   // ProviderApiService.getProviders(); getHealth() is fetched alongside (an
   // intentional additive) so FallbackBadge / system-health have data to read.
+  // The masked credential status is loaded alongside so the no-key banner and
+  // generation gate reflect server-stored keys.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -52,10 +54,11 @@ export const AppShell: React.FC = () => {
         //  doesn't surface a banner in the output panel.)
       }
     })();
+    void refreshCredentials();
     return () => {
       cancelled = true;
     };
-  }, [providerApi, dispatch]);
+  }, [providerApi, dispatch, refreshCredentials]);
 
   return (
     <>
@@ -74,7 +77,7 @@ export const AppShell: React.FC = () => {
         </EuiFlexItem>
         <EuiFlexItem grow css={css({ minHeight: 0 })}>
           <SplitLayout
-            left={<ChatPanel />}
+            left={<ChatPanel onOpenSettings={() => setSettingsOpen(true)} />}
             right={
               <EuiFlexGroup
                 direction="column"
@@ -125,7 +128,10 @@ export const AppShell: React.FC = () => {
             </EuiTitle>
           </EuiFlyoutHeader>
           <EuiFlyoutBody>
-            <ApiKeysPanel onClose={() => setSettingsOpen(false)} />
+            <ApiKeysPanel
+              onClose={() => setSettingsOpen(false)}
+              onChange={() => void refreshCredentials()}
+            />
             <EuiHorizontalRule />
             <TokenEstimatePanel />
           </EuiFlyoutBody>

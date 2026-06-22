@@ -9,10 +9,13 @@ class Harness extends ApiClient {
   public runGet<T>(path: string): Promise<T> {
     return this.get<T>(path);
   }
+  public runDel<T>(path: string): Promise<T> {
+    return this.del<T>(path);
+  }
 }
 
 function makeHttp() {
-  return { post: jest.fn(), get: jest.fn() };
+  return { post: jest.fn(), get: jest.fn(), delete: jest.fn() };
 }
 
 describe('ApiError', () => {
@@ -68,6 +71,20 @@ describe('ApiClient', () => {
 
     expect(out).toEqual({ status: 'healthy' });
     expect(http.get).toHaveBeenCalledWith('/h');
+  });
+
+  it('del resolves the response and maps errors to ApiError', async () => {
+    const http = makeHttp();
+    http.delete.mockResolvedValue({ deleted: true });
+    const harness = new Harness(http as unknown as HttpSetup);
+
+    const out = await harness.runDel('/d');
+
+    expect(out).toEqual({ deleted: true });
+    expect(http.delete).toHaveBeenCalledWith('/d');
+
+    http.delete.mockRejectedValue({ response: { status: 404 }, body: { message: 'nope' } });
+    await expect(harness.runDel('/d')).rejects.toBeInstanceOf(ApiError);
   });
 
   it('falls back to status 500 and the error message for plain errors', async () => {

@@ -1,49 +1,97 @@
 /**
  * @jest-environment jsdom
  */
-import { act, renderHook } from '@testing-library/react';
+import React from 'react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 
 import { useCredentials } from './useCredentials';
-import { loadCredentials } from '../services/credentials.store';
+import { ServicesContext, type Services } from '../services';
+import type { MaskedCredentials, SaveCredentialsInput } from '../../common/types';
+
+const MASKED: MaskedCredentials = {
+  primary: { provider: 'groq', model: null, endpoint: null, hasKey: true },
+  fallback: null,
+};
+
+function makeServices(overrides: Partial<Services['credentialsApi']> = {}): {
+  services: Services;
+  getCredentials: jest.Mock;
+  saveCredentials: jest.Mock;
+  deleteCredentials: jest.Mock;
+} {
+  const getCredentials = jest.fn().mockResolvedValue(MASKED);
+  const saveCredentials = jest.fn().mockResolvedValue(MASKED);
+  const deleteCredentials = jest.fn().mockResolvedValue(undefined);
+  const services = {
+    queryApi: {},
+    providerApi: {},
+    benchmarkApi: {},
+    credentialsApi: { getCredentials, saveCredentials, deleteCredentials, ...overrides },
+  } as unknown as Services;
+  return { services, getCredentials, saveCredentials, deleteCredentials };
+}
+
+function wrapper(services: Services): React.FC<{ children: React.ReactNode }> {
+  return ({ children }) => (
+    <ServicesContext.Provider value={services}>{children}</ServicesContext.Provider>
+  );
+}
 
 describe('useCredentials', () => {
-  beforeEach(() => {
-    window.localStorage.clear();
+  it('loads the masked status from the server on mount', async () => {
+    const { services, getCredentials } = makeServices();
+
+    const { result } = renderHook(() => useCredentials(), { wrapper: wrapper(services) });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(getCredentials).toHaveBeenCalledTimes(1);
+    expect(result.current.status).toEqual(MASKED);
   });
 
-  it('seeds from the persisted store on mount', () => {
-    window.localStorage.setItem(
-      'queryCopilot.providerCredentials',
-      JSON.stringify({ primary: { provider: 'groq', apiKey: 'k' } })
-    );
+  it('sets status to null when the server has no credentials', async () => {
+    const { services } = makeServices({
+      getCredentials: jest.fn().mockRejectedValue(new Error('not found')),
+    });
 
-    const { result } = renderHook(() => useCredentials());
+    const { result } = renderHook(() => useCredentials(), { wrapper: wrapper(services) });
 
-    expect(result.current.credentials).toEqual({ primary: { provider: 'groq', apiKey: 'k' } });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.status).toBeNull();
   });
 
-  it('setCredentials persists and updates state', () => {
-    const { result } = renderHook(() => useCredentials());
+  it('save POSTs the input, updates status, and fires onChange', async () => {
+    const onChange = jest.fn();
+    const { services, saveCredentials } = makeServices();
+    const input: SaveCredentialsInput = {
+      primary: { provider: 'openai', apiKey: 'sk-x' },
+      fallback: null,
+    };
 
-    act(() => {
-      result.current.setCredentials({ primary: { provider: 'openai', apiKey: 'sk-x' } });
+    const { result } = renderHook(() => useCredentials(onChange), { wrapper: wrapper(services) });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.save(input);
     });
 
-    expect(result.current.credentials).toEqual({ primary: { provider: 'openai', apiKey: 'sk-x' } });
-    expect(loadCredentials()).toEqual({ primary: { provider: 'openai', apiKey: 'sk-x' } });
+    expect(saveCredentials).toHaveBeenCalledWith(input);
+    expect(result.current.status).toEqual(MASKED);
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
 
-  it('clearCredentials removes persisted bundle and resets state', () => {
-    const { result } = renderHook(() => useCredentials());
+  it('clear DELETEs, resets status to null, and fires onChange', async () => {
+    const onChange = jest.fn();
+    const { services, deleteCredentials } = makeServices();
 
-    act(() => {
-      result.current.setCredentials({ primary: { provider: 'openai', apiKey: 'sk-x' } });
-    });
-    act(() => {
-      result.current.clearCredentials();
+    const { result } = renderHook(() => useCredentials(onChange), { wrapper: wrapper(services) });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.clear();
     });
 
-    expect(result.current.credentials).toBeNull();
-    expect(loadCredentials()).toBeNull();
+    expect(deleteCredentials).toHaveBeenCalledTimes(1);
+    expect(result.current.status).toBeNull();
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
 });

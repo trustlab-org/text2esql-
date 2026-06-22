@@ -7,8 +7,7 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { TokenEstimatePanel } from './TokenEstimatePanel';
 import { ServicesContext, type Services } from '../../services';
 import { CopilotProvider } from '../../store/copilot.context';
-import { saveCredentials } from '../../services/credentials.store';
-import type { TokenEstimateResponse } from '../../../common/types';
+import type { MaskedCredentials, TokenEstimateResponse } from '../../../common/types';
 
 const ESTIMATES: TokenEstimateResponse = {
   estimates: [
@@ -37,11 +36,28 @@ const ESTIMATES: TokenEstimateResponse = {
   ],
 };
 
-function makeServices(estimateTokens: jest.Mock): Services {
+function maskedFor(provider: MaskedCredentials['primary']['provider']): MaskedCredentials {
+  return {
+    primary: { provider, model: null, endpoint: null, hasKey: true },
+    fallback: null,
+  };
+}
+
+function makeServices(
+  estimateTokens: jest.Mock,
+  status: MaskedCredentials | null
+): Services {
   return {
     queryApi: { generateQuery: jest.fn(), executeQuery: jest.fn(), estimateTokens },
     providerApi: { getProviders: jest.fn(), getHealth: jest.fn() },
     benchmarkApi: { runBenchmark: jest.fn() },
+    credentialsApi: {
+      getCredentials: status
+        ? jest.fn().mockResolvedValue(status)
+        : jest.fn().mockRejectedValue(new Error('none')),
+      saveCredentials: jest.fn(),
+      deleteCredentials: jest.fn(),
+    },
   } as unknown as Services;
 }
 
@@ -56,14 +72,9 @@ function renderPanel(services: Services) {
 }
 
 describe('TokenEstimatePanel', () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-  });
-
   it('renders the estimate table from a mocked estimateTokens response', async () => {
-    saveCredentials({ primary: { provider: 'anthropic', apiKey: 'sk-1' } });
     const estimateTokens = jest.fn().mockResolvedValue(ESTIMATES);
-    const { getByTestId } = renderPanel(makeServices(estimateTokens));
+    const { getByTestId } = renderPanel(makeServices(estimateTokens, maskedFor('anthropic')));
 
     await waitFor(() => expect(getByTestId('queryCopilotTokenEstimateTable')).toBeTruthy());
 
@@ -74,9 +85,8 @@ describe('TokenEstimatePanel', () => {
   });
 
   it('estimates the most recent analyst query, defaulting to the example placeholder', async () => {
-    saveCredentials({ primary: { provider: 'anthropic', apiKey: 'sk-1' } });
     const estimateTokens = jest.fn().mockResolvedValue(ESTIMATES);
-    renderPanel(makeServices(estimateTokens));
+    renderPanel(makeServices(estimateTokens, maskedFor('anthropic')));
 
     await waitFor(() => expect(estimateTokens).toHaveBeenCalled());
     const [query, providers] = estimateTokens.mock.calls[0];
@@ -85,14 +95,20 @@ describe('TokenEstimatePanel', () => {
   });
 
   it('shows an error callout when the estimate call fails', async () => {
-    saveCredentials({ primary: { provider: 'openai', apiKey: 'sk-1' } });
     const estimateTokens = jest.fn().mockRejectedValue(new Error('boom'));
-    const { getByTestId } = renderPanel(makeServices(estimateTokens));
+    const { getByTestId } = renderPanel(makeServices(estimateTokens, maskedFor('openai')));
 
+    // The auto-estimate fires once the masked status loads.
+    await waitFor(() => expect(estimateTokens).toHaveBeenCalled());
+
+    // Re-running via the button still surfaces an error callout.
     await act(async () => {
       fireEvent.click(getByTestId('queryCopilotEstimateTokensButton'));
     });
-
-    await waitFor(() => expect(estimateTokens).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(getByTestId('queryCopilotTokenEstimatePanel').textContent).toContain(
+        'Token estimate failed.'
+      )
+    );
   });
 });

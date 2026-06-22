@@ -4,7 +4,10 @@ import type {
   CoreStart,
   Plugin,
   Logger,
+  KibanaRequest,
+  SavedObjectsClientContract,
 } from '@kbn/core/server';
+import type { EncryptedSavedObjectsClient } from '@kbn/encrypted-saved-objects-plugin/server';
 
 import type {
   QueryCopilotPluginSetup,
@@ -39,6 +42,8 @@ import { KQLValidatorService } from './services/validation';
 import { CorrectionEngine, CorrectionPromptBuilder } from './services/correction';
 import { QueryPipeline } from './services/query';
 import { McpClientService, McpMappingProvider, McpSearchProvider } from './services/mcp';
+import { CredentialsService } from './services/credentials';
+import { credentialsType, CREDENTIALS_SO_TYPE } from './saved_objects/credentials.type';
 import type { ElasticsearchClient } from '@kbn/core/server';
 import type Redis from 'ioredis';
 
@@ -57,6 +62,16 @@ export class QueryCopilotPlugin
   private providerMap?: ReadonlyMap<ProviderName, ILLMProvider>;
   private redisClient?: Redis;
   private mcpClient?: McpClientService;
+  /**
+   * start()-time contracts needed to build a per-request {@link CredentialsService}.
+   * Populated in start(); read lazily by the context's getCredentialsService so
+   * route handlers can resolve encrypted per-user credentials. Undefined until
+   * start() has run.
+   */
+  private credentialsRuntime?: {
+    esoClient: EncryptedSavedObjectsClient;
+    getScopedClient: (request: KibanaRequest) => SavedObjectsClientContract;
+  };
 
   constructor(initializerContext: PluginInitializerContext) {
     this.initializerContext = initializerContext;
@@ -65,9 +80,34 @@ export class QueryCopilotPlugin
 
   public setup(
     core: CoreSetup,
-    _deps: PluginSetupDependencies
+    deps: PluginSetupDependencies
   ): QueryCopilotPluginSetup {
     this.logger.info('queryCopilot: setup');
+
+    // ── Per-user encrypted credentials (Stage 3) ──────────────────────────────
+    // The saved object stores each user's LLM keys encrypted at rest. It is
+    // registered with core (so the type exists) and with encryptedSavedObjects
+    // (so the apiKey attributes are encrypted/decrypted). The actual storage
+    // service is built per request in start() once the ESO/SO start contracts
+    // are available.
+    core.savedObjects.registerType(credentialsType);
+    // This ESO version uses an AAD allowlist (`attributesToIncludeInAAD`) rather
+    // than an exclude-list; we bind the plaintext provider metadata into the AAD
+    // so a key cannot be lifted onto a different provider/endpoint record. The
+    // two *ApiKey attributes are the encrypted ones and must NOT appear here.
+    deps.encryptedSavedObjects.registerType({
+      type: CREDENTIALS_SO_TYPE,
+      attributesToEncrypt: new Set(['primaryApiKey', 'fallbackApiKey']),
+      attributesToIncludeInAAD: new Set([
+        'primaryProvider',
+        'primaryModel',
+        'primaryEndpoint',
+        'fallbackEnabled',
+        'fallbackProvider',
+        'fallbackModel',
+        'fallbackEndpoint',
+      ]),
+    });
 
     // ── Config ──────────────────────────────────────────────────────────────
     const config = this.initializerContext.config.get<ReturnType<typeof configSchema.validate>>();
@@ -214,6 +254,18 @@ export class QueryCopilotPlugin
       cacheService,
       createPipeline,
       mcpSearchProvider,
+      // Lazily builds a per-request CredentialsService once start() has wired the
+      // ESO start client + scoped-SO-client factory. Returns undefined before
+      // start(); route handlers treat that as "not ready".
+      getCredentialsService: (request: KibanaRequest): CredentialsService | undefined => {
+        const runtime = this.credentialsRuntime;
+        if (!runtime) {
+          return undefined;
+        }
+        return new CredentialsService(runtime.esoClient, () =>
+          runtime.getScopedClient(request)
+        );
+      },
     };
 
     // ── Routes ────────────────────────────────────────────────────────────────
@@ -226,10 +278,25 @@ export class QueryCopilotPlugin
   }
 
   public async start(
-    _core: CoreStart,
-    _deps: PluginStartDependencies
+    core: CoreStart,
+    deps: PluginStartDependencies
   ): Promise<QueryCopilotPluginStart> {
     this.logger.info('queryCopilot: start');
+
+    // Wire the per-user credential runtime now that start-time contracts exist.
+    // - esoClient decrypts the apiKey attributes (getDecryptedAsInternalUser).
+    // - getScopedClient yields a request-scoped SO client that INCLUDES the
+    //   hidden credentials type, so reads/writes honour the caller's space+RBAC.
+    this.credentialsRuntime = {
+      esoClient: deps.encryptedSavedObjects.getClient({
+        includedHiddenTypes: [CREDENTIALS_SO_TYPE],
+      }),
+      getScopedClient: (request: KibanaRequest) =>
+        core.savedObjects.getScopedClient(request, {
+          includedHiddenTypes: [CREDENTIALS_SO_TYPE],
+        }),
+    };
+
     await this.validateProviders();
 
     // Best-effort eager connect to the MCP server when the mapping path is enabled.

@@ -2,7 +2,6 @@ import type { QueryLanguage } from '../constants';
 import type { ProviderName } from './provider.types';
 import type { ConversationMessage, QueryPipelineResult } from './pipeline.types';
 import type { QueryExecutionResult } from './execution.types';
-import type { RequestCredentials } from './credentials.types';
 import type { TokenEstimate, CostEstimate } from './cost.types';
 
 /**
@@ -22,12 +21,6 @@ export interface QueryGenerationRequest {
   readonly requestedLanguage?: QueryLanguage | null;
   readonly conversationHistory?: readonly ConversationMessage[];
   readonly preferredProvider?: ProviderName;
-  /**
-   * Per-request LLM credentials supplied by the caller (the user's own primary +
-   * optional fallback keys). When present, the server builds providers from
-   * these rather than the boot-time kibana.yml config. Keys are never logged.
-   */
-  readonly credentials?: RequestCredentials;
 }
 
 /** Response from `POST /api/query_copilot/generate` — the full pipeline result. */

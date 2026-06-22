@@ -1,6 +1,7 @@
 import type {
   ConversationMessage,
   CostEstimate,
+  MaskedCredentials,
   ProviderStatus,
   QueryExecutionResponse,
   QueryGenerationResponse,
@@ -45,6 +46,11 @@ export interface CopilotState {
   readonly queryResults: QueryExecutionResponse | null;
   readonly indexPattern: string;
   readonly timeRange: TimeRange;
+  /**
+   * Masked status of the user's server-stored LLM credentials, or null when not
+   * loaded / not configured. Used to gate generation and drive the no-key banner.
+   */
+  readonly credentialsStatus: MaskedCredentials | null;
 }
 
 /**
@@ -68,6 +74,7 @@ export const COPILOT_ACTION_TYPES = {
   SET_QUERY_RESULTS: 'SET_QUERY_RESULTS',
   SET_TIME_RANGE: 'SET_TIME_RANGE',
   SET_INDEX_PATTERN: 'SET_INDEX_PATTERN',
+  SET_CREDENTIALS_STATUS: 'SET_CREDENTIALS_STATUS',
 } as const;
 
 export type CopilotActionType =
@@ -134,6 +141,11 @@ export interface SetIndexPatternAction {
   readonly indexPattern: string;
 }
 
+export interface SetCredentialsStatusAction {
+  readonly type: typeof COPILOT_ACTION_TYPES.SET_CREDENTIALS_STATUS;
+  readonly status: MaskedCredentials | null;
+}
+
 /** Discriminated union of every copilot action. */
 export type CopilotAction =
   | SendQueryAction
@@ -147,4 +159,5 @@ export type CopilotAction =
   | SetValidationResultAction
   | SetQueryResultsAction
   | SetTimeRangeAction
-  | SetIndexPatternAction;
+  | SetIndexPatternAction
+  | SetCredentialsStatusAction;

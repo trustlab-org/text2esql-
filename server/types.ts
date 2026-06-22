@@ -1,6 +1,11 @@
-import type { ElasticsearchClient } from '@kbn/core/server';
+import type { ElasticsearchClient, KibanaRequest } from '@kbn/core/server';
 import type { NavigationServerPluginSetup } from '@kbn/navigation-plugin/server';
+import type {
+  EncryptedSavedObjectsPluginSetup,
+  EncryptedSavedObjectsPluginStart,
+} from '@kbn/encrypted-saved-objects-plugin/server';
 import type { RequestCredentials } from '../common/types';
+import type { CredentialsService } from './services/credentials';
 import type { LoggerService } from './services/observability/logger.service';
 import type { MetricsService } from './services/observability/metrics.service';
 import type { ConfigService } from './services/config/config.service';
@@ -15,10 +20,12 @@ import type { QuerySearchProvider } from './services/execution';
 
 export interface PluginSetupDependencies {
   navigation: NavigationServerPluginSetup;
+  encryptedSavedObjects: EncryptedSavedObjectsPluginSetup;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
-export interface PluginStartDependencies {}
+export interface PluginStartDependencies {
+  encryptedSavedObjects: EncryptedSavedObjectsPluginStart;
+}
 
 // ---------------------------------------------------------------------------
 // Plugin contract surfaces
@@ -62,4 +69,12 @@ export interface QueryCopilotContext {
    * privileges rather than the caller's.
    */
   readonly mcpSearchProvider?: QuerySearchProvider;
+  /**
+   * Builds a request-scoped {@link CredentialsService} for storing/reading the
+   * authenticated user's encrypted LLM credentials. Returns `undefined` until
+   * the plugin's `start()` lifecycle has wired the encryptedSavedObjects start
+   * client and the scoped-saved-objects-client factory (both only available at
+   * start). Route handlers must treat `undefined` as "not ready yet".
+   */
+  readonly getCredentialsService?: (request: KibanaRequest) => CredentialsService | undefined;
 }

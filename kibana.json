@@ -9,7 +9,7 @@
   "description": "",
   "server": true,
   "ui": true,
-  "requiredPlugins": ["navigation"],
+  "requiredPlugins": ["navigation", "encryptedSavedObjects"],
   "optionalPlugins": [],
   "requiredBundles": ["kibanaReact"]
 }

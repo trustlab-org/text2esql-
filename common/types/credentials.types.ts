@@ -37,3 +37,44 @@ export interface RequestCredentials {
   /** Tried when the primary fails. Absent/null when no fallback is supplied. */
   readonly fallback?: ProviderCredential | null;
 }
+
+// ---------------------------------------------------------------------------
+// Masked credential metadata
+//
+// Stage 3 moved raw keys to encrypted server-side storage. The browser now only
+// ever handles MASKED metadata: provider/model/endpoint plus a `hasKey` boolean.
+// Raw keys are never returned to the client. These structurally mirror the
+// server's own copies in credentials.service.ts; they are the frontend-facing
+// contract exported from common.
+// ---------------------------------------------------------------------------
+
+/** Masked metadata for a single provider slot. Never carries a raw key. */
+export interface MaskedProvider {
+  readonly provider: ProviderName;
+  readonly model: string | null;
+  readonly endpoint: string | null;
+  readonly hasKey: boolean;
+}
+
+/** Masked status for the user's stored credentials (GET /credentials). */
+export interface MaskedCredentials {
+  readonly primary: MaskedProvider;
+  readonly fallback: (MaskedProvider & { readonly enabled: boolean }) | null;
+}
+
+/** Per-provider input for one slot of a save request. */
+export interface SaveCredentialInput {
+  readonly provider: ProviderName;
+  readonly model?: string;
+  readonly endpoint?: string;
+  /** Omit/empty to PRESERVE the existing encrypted key on update. Never logged. */
+  readonly apiKey?: string;
+}
+
+/** Body for POST /credentials. */
+export interface SaveCredentialsInput {
+  readonly primary: SaveCredentialInput;
+  readonly fallback?:
+    | (SaveCredentialInput & { readonly enabled: boolean })
+    | null;
+}

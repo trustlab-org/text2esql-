@@ -3,17 +3,20 @@ import type { HttpSetup } from '@kbn/core/public';
 import { QueryApiService } from './query.api';
 import { ProviderApiService } from './provider.api';
 import { BenchmarkApiService } from './benchmark.api';
+import { CredentialsApiService } from './credentials.api';
 
 export { ApiClient, ApiError } from './api.client';
 export { QueryApiService } from './query.api';
 export { ProviderApiService } from './provider.api';
 export { BenchmarkApiService } from './benchmark.api';
+export { CredentialsApiService } from './credentials.api';
 
 /** All API service instances made available to the React tree. */
 export interface Services {
   readonly queryApi: QueryApiService;
   readonly providerApi: ProviderApiService;
   readonly benchmarkApi: BenchmarkApiService;
+  readonly credentialsApi: CredentialsApiService;
 }
 
 /** Constructs the service instances from a Kibana HttpSetup. */
@@ -22,6 +25,7 @@ export function createServices(http: HttpSetup): Services {
     queryApi: new QueryApiService(http),
     providerApi: new ProviderApiService(http),
     benchmarkApi: new BenchmarkApiService(http),
+    credentialsApi: new CredentialsApiService(http),
   };
 }
 

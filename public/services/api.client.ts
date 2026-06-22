@@ -42,6 +42,14 @@ export class ApiClient {
     }
   }
 
+  protected async del<T>(path: string): Promise<T> {
+    try {
+      return await this.http.delete<T>(path);
+    } catch (error) {
+      throw this.toApiError(error);
+    }
+  }
+
   protected toApiError(error: unknown): ApiError {
     const candidate = error as
       | {

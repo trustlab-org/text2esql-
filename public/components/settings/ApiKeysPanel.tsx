@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   EuiButton,
   EuiButtonEmpty,
@@ -15,7 +15,12 @@ import {
 } from '@elastic/eui';
 import type { EuiSelectOption } from '@elastic/eui';
 
-import type { ProviderCredential, ProviderName, RequestCredentials } from '../../../common/types';
+import type {
+  MaskedProvider,
+  ProviderName,
+  SaveCredentialInput,
+  SaveCredentialsInput,
+} from '../../../common/types';
 import { ALL_PROVIDER_NAMES, PROVIDER_DEFAULT_MODELS, PROVIDER_NAMES } from '../../../common';
 import { providerDisplayName } from '../statusbar/provider_display';
 import { useCredentials } from '../../hooks/useCredentials';
@@ -23,13 +28,18 @@ import { useCredentials } from '../../hooks/useCredentials';
 /**
  * Settings form for the user's OWN primary (+ optional fallback) LLM credentials.
  *
- * Keys are rendered ONLY in password fields and never placed in tooltips, logs,
- * or aria-labels. On save the bundle is persisted to localStorage via
- * {@link useCredentials} and the flyout is closed.
+ * Keys now live in encrypted SERVER-SIDE storage; the browser only ever handles
+ * MASKED metadata. The form prefills provider/model/endpoint from the masked
+ * status and shows a "key set"/"no key set" indicator per slot, but the password
+ * fields ALWAYS start empty (raw keys are never returned). Leaving a password
+ * field empty on save PRESERVES the existing stored key. Keys are rendered only
+ * in password fields and never placed in tooltips, logs, or aria-labels.
  */
 
 interface ApiKeysPanelProps {
   readonly onClose: () => void;
+  /** Called after a successful save/clear so global credential status refreshes. */
+  readonly onChange?: () => void;
 }
 
 const PROVIDER_OPTIONS: EuiSelectOption[] = ALL_PROVIDER_NAMES.map((name) => ({
@@ -47,21 +57,29 @@ interface SectionState {
 
 const DEFAULT_PROVIDER: ProviderName = PROVIDER_NAMES.ANTHROPIC;
 
-function sectionFromCredential(cred: ProviderCredential | null | undefined): SectionState {
-  if (!cred) {
-    return { provider: DEFAULT_PROVIDER, apiKey: '', model: '', endpoint: '' };
+function emptySection(): SectionState {
+  return { provider: DEFAULT_PROVIDER, apiKey: '', model: '', endpoint: '' };
+}
+
+/** Seeds a section from masked status (provider/model/endpoint only — no key). */
+function sectionFromMasked(masked: MaskedProvider | null | undefined): SectionState {
+  if (!masked) {
+    return emptySection();
   }
   return {
-    provider: cred.provider,
-    apiKey: cred.apiKey ?? '',
-    model: cred.model ?? '',
-    endpoint: cred.endpoint ?? '',
+    provider: masked.provider,
+    apiKey: '',
+    model: masked.model ?? '',
+    endpoint: masked.endpoint ?? '',
   };
 }
 
-/** Builds a {@link ProviderCredential} from a section, omitting empty fields. */
-function credentialFromSection(section: SectionState): ProviderCredential {
-  const result: { -readonly [K in keyof ProviderCredential]: ProviderCredential[K] } = {
+/**
+ * Builds a {@link SaveCredentialInput} from a section, omitting empty fields. An
+ * empty apiKey is omitted so the server preserves the existing stored key.
+ */
+function inputFromSection(section: SectionState): SaveCredentialInput {
+  const result: { -readonly [K in keyof SaveCredentialInput]: SaveCredentialInput[K] } = {
     provider: section.provider,
   };
   const apiKey = section.apiKey.trim();
@@ -79,56 +97,99 @@ function credentialFromSection(section: SectionState): ProviderCredential {
   return result;
 }
 
-export const ApiKeysPanel: React.FC<ApiKeysPanelProps> = ({ onClose }) => {
-  const { credentials, setCredentials, clearCredentials } = useCredentials();
+/** "key set" status text for a slot (key present, or Ollama which needs none). */
+function slotStatus(masked: MaskedProvider | null | undefined): string {
+  if (!masked) {
+    return 'no key set';
+  }
+  if (masked.provider === PROVIDER_NAMES.OLLAMA) {
+    return 'key set ✓';
+  }
+  return masked.hasKey ? 'key set ✓' : 'no key set';
+}
 
-  const [primary, setPrimary] = useState<SectionState>(() =>
-    sectionFromCredential(credentials?.primary)
-  );
-  const [fallbackEnabled, setFallbackEnabled] = useState<boolean>(
-    () => Boolean(credentials?.fallback)
-  );
-  const [fallback, setFallback] = useState<SectionState>(() =>
-    sectionFromCredential(credentials?.fallback ?? null)
-  );
+export const ApiKeysPanel: React.FC<ApiKeysPanelProps> = ({ onClose, onChange }) => {
+  const { status, save, clear, error: hookError } = useCredentials(onChange);
+
+  const [primary, setPrimary] = useState<SectionState>(emptySection);
+  const [fallbackEnabled, setFallbackEnabled] = useState<boolean>(false);
+  const [fallback, setFallback] = useState<SectionState>(emptySection);
   const [error, setError] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState<boolean>(false);
+
+  // Prefill from masked status once it loads (provider/model/endpoint only).
+  useEffect(() => {
+    if (status && !hydrated) {
+      setPrimary(sectionFromMasked(status.primary));
+      setFallbackEnabled(Boolean(status.fallback?.enabled));
+      setFallback(sectionFromMasked(status.fallback ?? null));
+      setHydrated(true);
+    }
+  }, [status, hydrated]);
 
   const primaryIsOllama = primary.provider === PROVIDER_NAMES.OLLAMA;
   const fallbackIsOllama = fallback.provider === PROVIDER_NAMES.OLLAMA;
 
-  const statusLine = useMemo<string>(() => {
-    if (!credentials) {
-      return 'Primary: not set';
+  // Whether the slot already has a usable stored key (so an empty password field
+  // is fine — it preserves the existing key rather than being a first-time set).
+  const primaryHasStoredKey = useMemo<boolean>(() => {
+    if (!status) {
+      return false;
     }
-    const usable =
-      credentials.primary.provider === PROVIDER_NAMES.OLLAMA ||
-      (credentials.primary.apiKey ?? '').length > 0;
-    return `Primary: ${usable ? 'key set' : 'not set'}`;
-  }, [credentials]);
+    return status.primary.provider === primary.provider && status.primary.hasKey;
+  }, [status, primary.provider]);
 
-  const handleSave = (): void => {
-    if (!primaryIsOllama && primary.apiKey.trim().length === 0) {
+  const fallbackHasStoredKey = useMemo<boolean>(() => {
+    if (!status?.fallback) {
+      return false;
+    }
+    return status.fallback.provider === fallback.provider && status.fallback.hasKey;
+  }, [status, fallback.provider]);
+
+  const handleSave = async (): Promise<void> => {
+    // First-time set for a non-ollama provider with no key typed is blocked
+    // client-side (mirrors the backend 400). When a key is already stored for
+    // the same provider, an empty field is fine (it preserves the key).
+    if (!primaryIsOllama && primary.apiKey.trim().length === 0 && !primaryHasStoredKey) {
       setError('A primary API key is required (Ollama is the only provider that runs without one).');
       return;
     }
-    if (fallbackEnabled && !fallbackIsOllama && fallback.apiKey.trim().length === 0) {
+    if (
+      fallbackEnabled &&
+      !fallbackIsOllama &&
+      fallback.apiKey.trim().length === 0 &&
+      !fallbackHasStoredKey
+    ) {
       setError('The fallback provider needs an API key (or choose Ollama).');
       return;
     }
     setError(null);
-    const next: RequestCredentials = fallbackEnabled
-      ? { primary: credentialFromSection(primary), fallback: credentialFromSection(fallback) }
-      : { primary: credentialFromSection(primary) };
-    setCredentials(next);
-    onClose();
+
+    const input: SaveCredentialsInput = {
+      primary: inputFromSection(primary),
+      fallback: fallbackEnabled
+        ? { ...inputFromSection(fallback), enabled: true }
+        : null,
+    };
+
+    try {
+      await save(input);
+      onClose();
+    } catch {
+      // Error message is surfaced via the hook's `error` (rendered below).
+    }
   };
 
-  const handleClear = (): void => {
-    clearCredentials();
-    setPrimary({ provider: DEFAULT_PROVIDER, apiKey: '', model: '', endpoint: '' });
-    setFallback({ provider: DEFAULT_PROVIDER, apiKey: '', model: '', endpoint: '' });
-    setFallbackEnabled(false);
+  const handleClear = async (): Promise<void> => {
     setError(null);
+    try {
+      await clear();
+      setPrimary(emptySection());
+      setFallback(emptySection());
+      setFallbackEnabled(false);
+    } catch {
+      // Surfaced via hookError.
+    }
   };
 
   const renderSection = (
@@ -159,7 +220,10 @@ export const ApiKeysPanel: React.FC<ApiKeysPanelProps> = ({ onClose }) => {
             />
           </EuiFormRow>
         ) : (
-          <EuiFormRow label="API key">
+          <EuiFormRow
+            label="API key"
+            helpText="Leave blank to keep your existing key. Keys are stored encrypted on the server."
+          >
             <EuiFieldPassword
               type="dual"
               value={section.apiKey}
@@ -180,24 +244,27 @@ export const ApiKeysPanel: React.FC<ApiKeysPanelProps> = ({ onClose }) => {
     );
   };
 
+  const displayError = error ?? hookError;
+
   return (
     <div data-test-subj="queryCopilotApiKeysPanel">
       <EuiTitle size="s">
         <h3>Your LLM API keys</h3>
       </EuiTitle>
       <EuiText size="xs" color="subdued">
-        Keys are stored only in this browser and sent with each query. They are never written to
-        the server config.
+        Keys are stored encrypted on the server, scoped to your account. They are never written to
+        the server config and never returned to the browser.
       </EuiText>
       <EuiSpacer size="s" />
       <EuiText size="xs" color="subdued" data-test-subj="queryCopilotApiKeysStatus">
-        {statusLine}
+        Primary: {slotStatus(status?.primary)}
+        {status?.fallback ? ` | Fallback: ${slotStatus(status.fallback)}` : ''}
       </EuiText>
       <EuiSpacer size="m" />
 
-      {error && (
+      {displayError && (
         <>
-          <EuiCallOut color="danger" iconType="alert" title={error} size="s" />
+          <EuiCallOut color="danger" iconType="alert" title={displayError} size="s" />
           <EuiSpacer size="m" />
         </>
       )}
@@ -228,13 +295,13 @@ export const ApiKeysPanel: React.FC<ApiKeysPanelProps> = ({ onClose }) => {
 
         <EuiSpacer size="l" />
 
-        <EuiButton fill onClick={handleSave} data-test-subj="queryCopilotSaveKeysButton">
+        <EuiButton fill onClick={() => void handleSave()} data-test-subj="queryCopilotSaveKeysButton">
           Save keys
         </EuiButton>
         &nbsp;
         <EuiButtonEmpty
           color="danger"
-          onClick={handleClear}
+          onClick={() => void handleClear()}
           data-test-subj="queryCopilotClearKeysButton"
         >
           Clear keys

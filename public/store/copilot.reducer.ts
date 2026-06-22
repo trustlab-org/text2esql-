@@ -21,6 +21,7 @@ export function createInitialState(indexPattern: string): CopilotState {
     // Default to the last 24 hours so results show even when the most recent
     // logs are older than a few minutes; the time picker overrides this.
     timeRange: { from: 'now-24h', to: 'now' },
+    credentialsStatus: null,
   };
 }
 
@@ -84,8 +85,13 @@ export function copilotReducer(state: CopilotState, action: CopilotAction): Copi
     case COPILOT_ACTION_TYPES.SET_INDEX_PATTERN:
       return { ...state, indexPattern: action.indexPattern };
 
+    case COPILOT_ACTION_TYPES.SET_CREDENTIALS_STATUS:
+      return { ...state, credentialsStatus: action.status };
+
     case COPILOT_ACTION_TYPES.RESET_SESSION:
-      return createInitialState(state.indexPattern);
+      // Preserve the server-loaded credential status across a session reset; it
+      // reflects stored server state, not per-session conversation state.
+      return { ...createInitialState(state.indexPattern), credentialsStatus: state.credentialsStatus };
 
     default:
       assertNever(action);

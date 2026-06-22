@@ -1,5 +1,6 @@
 import type {
   ConversationMessage,
+  MaskedCredentials,
   ProviderStatus,
   QueryExecutionResponse,
   QueryGenerationResponse,
@@ -15,6 +16,7 @@ import {
   type QuerySuccessAction,
   type ResetSessionAction,
   type SendQueryAction,
+  type SetCredentialsStatusAction,
   type SetGeneratingAction,
   type SetProviderStateAction,
   type SetIndexPatternAction,
@@ -86,4 +88,11 @@ export function setTimeRange(timeRange: TimeRange): SetTimeRangeAction {
 /** Replaces the index pattern used for query generation and execution. */
 export function setIndexPattern(indexPattern: string): SetIndexPatternAction {
   return { type: COPILOT_ACTION_TYPES.SET_INDEX_PATTERN, indexPattern };
+}
+
+/** Stores the masked credential status loaded from the server (or null). */
+export function setCredentialsStatus(
+  status: MaskedCredentials | null
+): SetCredentialsStatusAction {
+  return { type: COPILOT_ACTION_TYPES.SET_CREDENTIALS_STATUS, status };
 }

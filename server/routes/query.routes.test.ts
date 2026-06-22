@@ -40,8 +40,20 @@ function captureHandler(): { router: IRouter; getHandler: () => any } {
   return { router, getHandler: () => handler };
 }
 
-function makeContext(execute: jest.Mock, createPipeline?: jest.Mock): QueryCopilotContext {
+// By default the mocked credentials service returns a usable primary credential
+// so the handler proceeds to the pipeline. Individual tests can override it.
+const DEFAULT_CREDS = { primary: { provider: 'openai', apiKey: 'sk-test' }, fallback: null };
+
+function makeContext(
+  execute: jest.Mock,
+  createPipeline?: jest.Mock,
+  getDecryptedCredentialsForUser?: jest.Mock
+): QueryCopilotContext {
   const cp = createPipeline ?? jest.fn(() => ({ execute }));
+  const credentialsService = {
+    getDecryptedCredentialsForUser:
+      getDecryptedCredentialsForUser ?? jest.fn().mockResolvedValue(DEFAULT_CREDS),
+  };
   return {
     logger: {
       logRequest: jest.fn(),
@@ -54,12 +66,18 @@ function makeContext(execute: jest.Mock, createPipeline?: jest.Mock): QueryCopil
     config: {},
     router: {},
     createPipeline: cp,
+    getCredentialsService: jest.fn(() => credentialsService),
   } as unknown as QueryCopilotContext;
 }
 
 const esClient = { search: jest.fn() };
 function makeCtx() {
-  return { core: Promise.resolve({ elasticsearch: { client: { asCurrentUser: esClient } } }) };
+  return {
+    core: Promise.resolve({
+      elasticsearch: { client: { asCurrentUser: esClient } },
+      security: { authc: { getCurrentUser: () => ({ username: 'alice' }) } },
+    }),
+  };
 }
 function makeRequest() {
   return {
@@ -105,9 +123,9 @@ describe('registerQueryRoutes handler', () => {
     expect(typeof okArg.headers['X-Request-ID']).toBe('string');
     expect(okArg.headers['X-Request-ID'].length).toBeGreaterThan(0);
 
-    // No credentials in the request body → undefined is forwarded (back-compat:
-    // the pipeline falls back to the boot-time singleton router).
-    expect(createPipeline).toHaveBeenCalledWith(esClient, undefined);
+    // Credentials are resolved server-side from the user's encrypted SO and
+    // forwarded to the pipeline factory (no longer read from the request body).
+    expect(createPipeline).toHaveBeenCalledWith(esClient, DEFAULT_CREDS);
 
     expect(execute).toHaveBeenCalledTimes(1);
     const pipelineRequest = execute.mock.calls[0][0];
@@ -133,6 +151,28 @@ describe('registerQueryRoutes handler', () => {
 
     const okArg = response.ok.mock.calls[0][0];
     expect(okArg.headers).toHaveProperty('X-Request-ID');
+  });
+
+  it('returns 422 with a friendly message when no credentials are configured', async () => {
+    const execute = jest.fn();
+    const createPipeline = jest.fn(() => ({ execute }));
+    const noCreds = jest.fn().mockResolvedValue(null);
+    const context = makeContext(execute, createPipeline, noCreds);
+
+    const { router, getHandler } = captureHandler();
+    registerQueryRoutes(router, context);
+    const handler = getHandler();
+
+    const response = makeResponse();
+    await handler(makeCtx(), makeRequest(), response as any);
+
+    expect(createPipeline).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+    expect(response.customError).toHaveBeenCalledTimes(1);
+    const errArg = response.customError.mock.calls[0][0];
+    expect(errArg.statusCode).toBe(422);
+    expect(errArg.body.message).toContain('No LLM API key configured');
+    expect(errArg.headers).toHaveProperty('X-Request-ID');
   });
 
   it('returns 503 customError with X-Request-ID for PROVIDER_UNREACHABLE failures', async () => {

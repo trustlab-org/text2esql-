@@ -6,15 +6,15 @@ import React, {
   useReducer,
   useRef,
 } from 'react';
-import { DEFAULT_INDEX_PATTERN } from '../../common';
-import type { ConversationMessage } from '../../common/types';
+import { DEFAULT_INDEX_PATTERN, PROVIDER_NAMES } from '../../common';
+import type { ConversationMessage, MaskedCredentials } from '../../common/types';
 import { ApiError, useServices } from '../services';
-import { hasUsablePrimary, loadCredentials } from '../services/credentials.store';
 import {
   addMessage,
   queryError,
   querySuccess,
   sendQuery as actionSendQuery,
+  setCredentialsStatus,
   setGenerating,
   setProviderState,
   setQueryResults,
@@ -42,6 +42,20 @@ function toCopilotError(error: unknown): CopilotError {
   return { message, statusCode: null, requestId: null };
 }
 
+/**
+ * True when the masked status has a usable primary slot: either the primary has
+ * a stored key, or its provider is Ollama (which runs locally and needs none).
+ */
+export function hasUsablePrimary(status: MaskedCredentials | null): boolean {
+  if (status === null) {
+    return false;
+  }
+  if (status.primary.provider === PROVIDER_NAMES.OLLAMA) {
+    return true;
+  }
+  return status.primary.hasKey;
+}
+
 /** Value exposed by {@link CopilotContext}. */
 export interface CopilotContextValue {
   readonly state: CopilotState;
@@ -49,6 +63,7 @@ export interface CopilotContextValue {
   readonly sendQuery: (query: string) => Promise<void>;
   readonly runQuery: () => Promise<void>;
   readonly refreshProviders: () => Promise<void>;
+  readonly refreshCredentials: () => Promise<void>;
 }
 
 export const CopilotContext = createContext<CopilotContextValue | null>(null);
@@ -77,11 +92,11 @@ export function CopilotProvider({ children, indexPattern, sessionId }: CopilotPr
   const sendQuery = useCallback(
     async (query: string): Promise<void> => {
       // Gate generation on the user supplying their OWN primary LLM key (there
-      // are no default keys). When no usable primary is configured, surface a
-      // guidance error and return WITHOUT calling the API or recording any
-      // assistant/user message.
-      const creds = loadCredentials();
-      if (!hasUsablePrimary(creds)) {
+      // are no default keys). The key now lives in encrypted server-side storage;
+      // we gate on the masked status loaded into state. When no usable primary is
+      // configured, surface a guidance error and return WITHOUT calling the API
+      // or recording any assistant/user message.
+      if (!hasUsablePrimary(stateRef.current.credentialsStatus)) {
         dispatch(
           queryError({
             message: 'Add your LLM API key in Settings (gear icon) before generating a query.',
@@ -110,7 +125,6 @@ export function CopilotProvider({ children, indexPattern, sessionId }: CopilotPr
           indexPattern: stateRef.current.indexPattern,
           sessionId: sessionIdRef.current,
           conversationHistory: stateRef.current.conversation,
-          credentials: creds ?? undefined,
         });
         const assistantMsg: ConversationMessage = {
           id: generateId(),
@@ -166,9 +180,22 @@ export function CopilotProvider({ children, indexPattern, sessionId }: CopilotPr
     }
   }, [services]);
 
+  // Loads the user's masked credential status from the server into state. Used
+  // on mount and after the settings panel saves/clears keys. Failures (e.g. the
+  // user has no stored credentials) reset the status to null rather than
+  // surfacing an error banner.
+  const refreshCredentials = useCallback(async (): Promise<void> => {
+    try {
+      const status = await services.credentialsApi.getCredentials();
+      dispatch(setCredentialsStatus(status));
+    } catch {
+      dispatch(setCredentialsStatus(null));
+    }
+  }, [services]);
+
   const value = useMemo<CopilotContextValue>(
-    () => ({ state, dispatch, sendQuery, runQuery, refreshProviders }),
-    [state, sendQuery, runQuery, refreshProviders]
+    () => ({ state, dispatch, sendQuery, runQuery, refreshProviders, refreshCredentials }),
+    [state, sendQuery, runQuery, refreshProviders, refreshCredentials]
   );
 
   return <CopilotContext.Provider value={value}>{children}</CopilotContext.Provider>;

@@ -2,18 +2,48 @@
  * @jest-environment jsdom
  */
 import React from 'react';
-import { fireEvent, render } from '@testing-library/react';
+import { fireEvent, render, waitFor } from '@testing-library/react';
 
 import { ApiKeysPanel } from './ApiKeysPanel';
-import { loadCredentials } from '../../services/credentials.store';
+import { ServicesContext, type Services } from '../../services';
+import type { MaskedCredentials } from '../../../common/types';
+
+function makeServices(overrides: {
+  getCredentials?: jest.Mock;
+  saveCredentials?: jest.Mock;
+  deleteCredentials?: jest.Mock;
+}): {
+  services: Services;
+  saveCredentials: jest.Mock;
+  deleteCredentials: jest.Mock;
+} {
+  const saveCredentials = overrides.saveCredentials ?? jest.fn().mockResolvedValue(null);
+  const deleteCredentials = overrides.deleteCredentials ?? jest.fn().mockResolvedValue(undefined);
+  const services = {
+    queryApi: {},
+    providerApi: {},
+    benchmarkApi: {},
+    credentialsApi: {
+      getCredentials: overrides.getCredentials ?? jest.fn().mockRejectedValue(new Error('none')),
+      saveCredentials,
+      deleteCredentials,
+    },
+  } as unknown as Services;
+  return { services, saveCredentials, deleteCredentials };
+}
+
+function renderPanel(services: Services, onClose: () => void = jest.fn()) {
+  return render(
+    <ServicesContext.Provider value={services}>
+      <ApiKeysPanel onClose={onClose} />
+    </ServicesContext.Provider>
+  );
+}
 
 describe('ApiKeysPanel', () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-  });
-
   it('renders the keys form with primary api key + save/clear controls', () => {
-    const { getByTestId } = render(<ApiKeysPanel onClose={jest.fn()} />);
+    const { services } = makeServices({});
+    const { getByTestId } = renderPanel(services);
 
     expect(getByTestId('queryCopilotApiKeysPanel')).toBeTruthy();
     expect(getByTestId('queryCopilotPrimaryApiKey')).toBeTruthy();
@@ -21,29 +51,51 @@ describe('ApiKeysPanel', () => {
     expect(getByTestId('queryCopilotClearKeysButton')).toBeTruthy();
   });
 
-  it('save persists the primary credential and closes', () => {
+  it('renders the masked status line (key set) from the server', async () => {
+    const masked: MaskedCredentials = {
+      primary: { provider: 'anthropic', model: null, endpoint: null, hasKey: true },
+      fallback: null,
+    };
+    const { services } = makeServices({ getCredentials: jest.fn().mockResolvedValue(masked) });
+    const { getByTestId } = renderPanel(services);
+
+    await waitFor(() =>
+      expect(getByTestId('queryCopilotApiKeysStatus').textContent).toContain('key set')
+    );
+  });
+
+  it('save posts a SaveCredentialsInput with the typed key and closes', async () => {
     const onClose = jest.fn();
-    const { getByTestId } = render(<ApiKeysPanel onClose={onClose} />);
+    const { services, saveCredentials } = makeServices({});
+    const { getByTestId } = renderPanel(services, onClose);
 
     fireEvent.change(getByTestId('queryCopilotPrimaryApiKey'), { target: { value: 'sk-abc' } });
     fireEvent.click(getByTestId('queryCopilotSaveKeysButton'));
 
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(loadCredentials()).toEqual({ primary: { provider: 'anthropic', apiKey: 'sk-abc' } });
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(saveCredentials).toHaveBeenCalledWith({
+      primary: { provider: 'anthropic', apiKey: 'sk-abc' },
+      fallback: null,
+    });
   });
 
-  it('blocks save (no close, no persist) when a non-ollama provider has no key', () => {
+  it('blocks save (no close, no post) when a non-ollama provider has no key', async () => {
     const onClose = jest.fn();
-    const { getByTestId } = render(<ApiKeysPanel onClose={onClose} />);
+    const { services, saveCredentials } = makeServices({});
+    const { getByTestId } = renderPanel(services, onClose);
 
     fireEvent.click(getByTestId('queryCopilotSaveKeysButton'));
 
+    await waitFor(() =>
+      expect(getByTestId('queryCopilotApiKeysPanel').textContent).toContain('API key is required')
+    );
     expect(onClose).not.toHaveBeenCalled();
-    expect(loadCredentials()).toBeNull();
+    expect(saveCredentials).not.toHaveBeenCalled();
   });
 
   it('hides the api key field and shows an endpoint field when ollama is selected', () => {
-    const { getByTestId, queryByTestId } = render(<ApiKeysPanel onClose={jest.fn()} />);
+    const { services } = makeServices({});
+    const { getByTestId, queryByTestId } = renderPanel(services);
 
     fireEvent.change(getByTestId('queryCopilotPrimaryProvider'), { target: { value: 'ollama' } });
 
@@ -51,28 +103,27 @@ describe('ApiKeysPanel', () => {
     expect(getByTestId('queryCopilotPrimaryEndpoint')).toBeTruthy();
   });
 
-  it('saves ollama without an api key (closes + persists)', () => {
+  it('saves ollama without an api key (closes + posts)', async () => {
     const onClose = jest.fn();
-    const { getByTestId } = render(<ApiKeysPanel onClose={onClose} />);
+    const { services, saveCredentials } = makeServices({});
+    const { getByTestId } = renderPanel(services, onClose);
 
     fireEvent.change(getByTestId('queryCopilotPrimaryProvider'), { target: { value: 'ollama' } });
     fireEvent.click(getByTestId('queryCopilotSaveKeysButton'));
 
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(loadCredentials()).toEqual({ primary: { provider: 'ollama' } });
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(saveCredentials).toHaveBeenCalledWith({
+      primary: { provider: 'ollama' },
+      fallback: null,
+    });
   });
 
-  it('clear keys removes the persisted bundle', () => {
-    const { getByTestId } = render(<ApiKeysPanel onClose={jest.fn()} />);
+  it('clear keys calls deleteCredentials', async () => {
+    const { services, deleteCredentials } = makeServices({});
+    const { getByTestId } = renderPanel(services);
 
-    fireEvent.change(getByTestId('queryCopilotPrimaryApiKey'), { target: { value: 'sk-abc' } });
-    fireEvent.click(getByTestId('queryCopilotSaveKeysButton'));
-    expect(loadCredentials()).not.toBeNull();
+    fireEvent.click(getByTestId('queryCopilotClearKeysButton'));
 
-    render(<ApiKeysPanel onClose={jest.fn()} />);
-    const clearButtons = document.querySelectorAll('[data-test-subj="queryCopilotClearKeysButton"]');
-    fireEvent.click(clearButtons[clearButtons.length - 1]);
-
-    expect(loadCredentials()).toBeNull();
+    await waitFor(() => expect(deleteCredentials).toHaveBeenCalledTimes(1));
   });
 });

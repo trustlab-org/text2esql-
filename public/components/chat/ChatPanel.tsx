@@ -13,14 +13,20 @@ import { css } from '@emotion/react';
 import { useCopilot } from '../../store/copilot.context';
 import { MessageThread } from './MessageThread';
 import { ChatInput } from './ChatInput';
+import { NoKeyBanner } from './NoKeyBanner';
 
 /**
- * Left-card chat panel: a header, the scrollable message thread, and the
- * single-line chat input pinned at the bottom. Reads the conversation and
- * generating state from CopilotContext and dispatches new queries via
- * `sendQuery`.
+ * Left-card chat panel: a header, an optional no-key banner, the scrollable
+ * message thread, and the single-line chat input pinned at the bottom. Reads the
+ * conversation and generating state from CopilotContext and dispatches new
+ * queries via `sendQuery`.
  */
-export const ChatPanel: React.FC = () => {
+interface ChatPanelProps {
+  /** Opens the settings flyout (used by the no-key banner shortcut). */
+  readonly onOpenSettings?: () => void;
+}
+
+export const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenSettings }) => {
   const { state, sendQuery } = useCopilot();
   const { euiTheme } = useEuiTheme();
 
@@ -49,6 +55,8 @@ export const ChatPanel: React.FC = () => {
       </EuiFlexGroup>
 
       <EuiHorizontalRule margin="s" />
+
+      {onOpenSettings && <NoKeyBanner onOpenSettings={onOpenSettings} />}
 
       <MessageThread messages={state.conversation} isGenerating={state.isGenerating} />
 
