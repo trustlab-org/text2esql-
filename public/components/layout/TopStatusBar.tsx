@@ -7,11 +7,13 @@ import {
   EuiText,
   EuiIcon,
   EuiAvatar,
+  EuiButton,
   EuiButtonEmpty,
   useEuiTheme,
 } from '@elastic/eui';
 import { css } from '@emotion/react';
 
+import { useCopilot, hasUsablePrimary } from '../../store/copilot.context';
 import { SyntaxBadge } from '../statusbar/SyntaxBadge';
 import { ECSFieldsBadge } from '../statusbar/ECSFieldsBadge';
 import { TokensBadge } from '../statusbar/TokensBadge';
@@ -33,6 +35,10 @@ interface TopStatusBarProps {
 
 export const TopStatusBar: React.FC<TopStatusBarProps> = ({ onOpenBenchmark, onOpenSettings }) => {
   const { euiTheme } = useEuiTheme();
+  const { state } = useCopilot();
+  // No usable primary key yet → surface a prominent call-to-action instead of
+  // the quiet gear, so a new user immediately sees where to add their key.
+  const needsKey = !hasUsablePrimary(state.credentialsStatus);
 
   const logoCss = css({
     display: 'flex',
@@ -116,14 +122,27 @@ export const TopStatusBar: React.FC<TopStatusBarProps> = ({ onOpenBenchmark, onO
             )}
             {onOpenSettings && (
               <EuiFlexItem grow={false}>
-                <EuiButtonEmpty
-                  size="s"
-                  iconType="gear"
-                  onClick={onOpenSettings}
-                  data-test-subj="queryCopilotOpenSettings"
-                >
-                  Settings
-                </EuiButtonEmpty>
+                {needsKey ? (
+                  <EuiButton
+                    size="s"
+                    fill
+                    color="warning"
+                    iconType="key"
+                    onClick={onOpenSettings}
+                    data-test-subj="queryCopilotOpenSettings"
+                  >
+                    Add API key
+                  </EuiButton>
+                ) : (
+                  <EuiButtonEmpty
+                    size="s"
+                    iconType="gear"
+                    onClick={onOpenSettings}
+                    data-test-subj="queryCopilotOpenSettings"
+                  >
+                    Settings
+                  </EuiButtonEmpty>
+                )}
               </EuiFlexItem>
             )}
             <EuiFlexItem grow={false}>
