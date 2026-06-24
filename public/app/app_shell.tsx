@@ -75,25 +75,21 @@ export const AppShell: React.FC = () => {
             onOpenSettings={() => setSettingsOpen(true)}
           />
         </EuiFlexItem>
-        <EuiFlexItem grow css={css({ minHeight: 0 })}>
+        {/* TOP ROW: two-column split — chat (left) + KQL editor (right). */}
+        <EuiFlexItem grow={3} css={css({ minHeight: 0 })}>
           <SplitLayout
             left={<ChatPanel onOpenSettings={() => setSettingsOpen(true)} />}
-            right={
-              <EuiFlexGroup
-                direction="column"
-                gutterSize="m"
-                responsive={false}
-                css={css({ flexGrow: 0 })}
-              >
-                <EuiFlexItem grow={false}>
-                  <KQLEditorPanel />
-                </EuiFlexItem>
-                <EuiFlexItem grow={false}>
-                  <QueryOutputPanel />
-                </EuiFlexItem>
-              </EuiFlexGroup>
-            }
+            right={<KQLEditorPanel />}
           />
+        </EuiFlexItem>
+        {/* BOTTOM ROW: query output spanning the full width below the split.
+            Given its own grow weight + a min-height (and its own scroll) so
+            results stay visible without squashing the top row. */}
+        <EuiFlexItem
+          grow={2}
+          css={css({ minHeight: 240, overflowY: 'auto', padding: '0 16px 16px' })}
+        >
+          <QueryOutputPanel />
         </EuiFlexItem>
       </EuiFlexGroup>
 
