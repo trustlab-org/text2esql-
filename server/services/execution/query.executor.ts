@@ -9,9 +9,13 @@
 import { randomUUID } from 'node:crypto';
 import type { ElasticsearchClient } from '@kbn/core/server';
 import type { QueryExecutionParams, QueryExecutionResult } from '../../../common/types';
+import { QUERY_LANGUAGES } from '../../../common';
 import type { LoggerService } from '../observability/logger.service';
 import { ResultNormalizer } from './result.normalizer';
 import { buildQueryDsl, DEFAULT_MAX_RESULTS, TIMESTAMP_SORT } from './search.query.builder';
+
+/** Shared request-timeout budget for both the KQL `_search` and ES|QL `_query` paths. */
+const EXECUTE_TIMEOUT_MS = 30_000;
 
 /**
  * Common contract for a query-execution backend: given
@@ -44,6 +48,13 @@ export class QueryExecutorService implements QuerySearchProvider {
    *   `buildEsQuery`) so the route can map it to an HTTP status.
    */
   async execute(params: QueryExecutionParams): Promise<QueryExecutionResult> {
+    // ES|QL runs natively via the _query endpoint as asCurrentUser (per-user
+    // RBAC). KQL (the default, or any non-ES|QL language) keeps the existing
+    // _search path unchanged below.
+    if (params.language === QUERY_LANGUAGES.ESQL) {
+      return this.executeEsql(params);
+    }
+
     const maxResults = params.maxResults ?? DEFAULT_MAX_RESULTS;
     const execId = randomUUID();
 
@@ -62,7 +73,7 @@ export class QueryExecutorService implements QuerySearchProvider {
           track_total_hits: true,
           timeout: '30s',
         },
-        { requestTimeout: 30_000 }
+        { requestTimeout: EXECUTE_TIMEOUT_MS }
       );
 
       const total =
@@ -86,6 +97,39 @@ export class QueryExecutorService implements QuerySearchProvider {
       this.logger.logError(execId, error, {
         stage: 'query_execute',
         indexPattern: params.indexPattern,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Executes an ES|QL statement via the native `_query` endpoint and normalizes
+   * the columnar response. The ES|QL string carries its own `FROM <pattern>`
+   * (and any time filtering), so `indexPattern`/`timeRange` are intentionally NOT
+   * applied here — re-applying them would double-target the query. Runs as the
+   * request-scoped `asCurrentUser` client (per-user RBAC), never via MCP.
+   */
+  private async executeEsql(params: QueryExecutionParams): Promise<QueryExecutionResult> {
+    const execId = randomUUID();
+    try {
+      const response = await this.esClient.esql.query(
+        { query: params.kql },
+        { requestTimeout: EXECUTE_TIMEOUT_MS }
+      );
+
+      const result = this.normalizer.normalizeEsql(response);
+
+      this.logger.logPipelineStage(execId, 'query_execute', result.tookMs, {
+        language: QUERY_LANGUAGES.ESQL,
+        total: result.total,
+        rows: result.rows.length,
+      });
+
+      return result;
+    } catch (error) {
+      this.logger.logError(execId, error, {
+        stage: 'query_execute',
+        language: QUERY_LANGUAGES.ESQL,
       });
       throw error;
     }

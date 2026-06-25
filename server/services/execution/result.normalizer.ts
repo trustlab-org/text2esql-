@@ -7,7 +7,64 @@
  */
 
 import type { estypes } from '@elastic/elasticsearch';
-import type { ColumnDataType, ColumnDefinition } from '../../../common/types';
+import type {
+  ColumnDataType,
+  ColumnDefinition,
+  QueryExecutionResult,
+} from '../../../common/types';
+
+/** A single ES|QL result column descriptor. */
+export interface EsqlColumnInfo {
+  readonly name: string;
+  readonly type: string;
+}
+
+/** The subset of an ES `_query` (ES|QL) response we consume. */
+export interface EsqlResponseLike {
+  readonly columns: ReadonlyArray<EsqlColumnInfo>;
+  readonly values: ReadonlyArray<ReadonlyArray<unknown>>;
+  /** DurationValue (number ms or string) — coerced to a number. */
+  readonly took?: unknown;
+}
+
+/** Maps an ES|QL column type to our render {@link ColumnDataType}. */
+function mapEsqlType(type: string): ColumnDataType {
+  switch (type) {
+    case 'date':
+    case 'datetime':
+    case 'date_nanos':
+      return 'date';
+    case 'ip':
+      return 'ip';
+    case 'long':
+    case 'integer':
+    case 'double':
+    case 'float':
+    case 'half_float':
+    case 'scaled_float':
+    case 'unsigned_long':
+    case 'short':
+    case 'byte':
+    case 'counter_long':
+    case 'counter_integer':
+    case 'counter_double':
+      return 'number';
+    case 'boolean':
+      return 'boolean';
+    case 'keyword':
+    case 'text':
+    case 'version':
+      return 'string';
+    case 'geo_point':
+    case 'geo_shape':
+    case 'cartesian_point':
+    case 'cartesian_shape':
+      return 'object';
+    default:
+      // Unknown/complex types render fine as text via cellToString.
+      return 'string';
+  }
+}
 
 /** Matches an IPv4 dotted-quad address. */
 const IPV4_RE = /^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)$/;
@@ -101,6 +158,33 @@ export class ResultNormalizer {
     });
 
     return { columns, rows };
+  }
+
+  /**
+   * Normalizes a columnar ES|QL response into the same object-row
+   * {@link QueryExecutionResult} shape that {@link normalizeHits} produces, so
+   * the existing results table renders it unchanged. Columns carry the explicit
+   * ES|QL types; each positional `values` row is zipped into an object keyed by
+   * column name.
+   */
+  normalizeEsql(response: EsqlResponseLike): QueryExecutionResult {
+    const columns: ColumnDefinition[] = response.columns.map((c) => ({
+      id: c.name,
+      displayName: c.name,
+      dataType: mapEsqlType(c.type),
+    }));
+
+    const rows: Array<Record<string, unknown>> = response.values.map((rowValues) =>
+      Object.fromEntries(response.columns.map((c, j) => [c.name, rowValues[j]]))
+    );
+
+    return {
+      columns,
+      rows,
+      total: response.values.length,
+      tookMs: typeof response.took === 'number' ? response.took : 0,
+      timedOut: false,
+    };
   }
 
   /** Infers a column's render type from its field name and a sampled value. */

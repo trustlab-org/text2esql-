@@ -7,9 +7,24 @@ import { QueryExecutorService } from '../services/execution';
 import { PLUGIN_ROUTE_PREFIX, QUERY_LANGUAGES } from '../../common';
 
 /** Request body for POST /execute. */
+/**
+ * Rejects cross-cluster (`:`) and system-index (leading `.`) targets while
+ * staying permissive for normal patterns like `fosstlsoc-logs-*`. Applies to
+ * both the KQL and ES|QL paths. Closes audit finding F3.
+ */
+const validateIndexPattern = (value: string): string | undefined => {
+  if (value.includes(':')) {
+    return 'cross-cluster index patterns (":") are not allowed';
+  }
+  if (value.split(',').some((part) => part.trim().startsWith('.'))) {
+    return 'system-index patterns (leading ".") are not allowed';
+  }
+  return undefined;
+};
+
 const executeRequestBodySchema = schema.object({
   kql: schema.string({ minLength: 1, maxLength: 8192 }),
-  indexPattern: schema.string({ minLength: 1, maxLength: 256 }),
+  indexPattern: schema.string({ minLength: 1, maxLength: 256, validate: validateIndexPattern }),
   timeRange: schema.maybe(
     schema.object({
       from: schema.string({ minLength: 1 }),
@@ -67,7 +82,13 @@ export function registerExecutionRoutes(router: IRouter, context: QueryCopilotCo
         };
 
         let result;
-        if (context.mcpSearchProvider) {
+        if (params.language === QUERY_LANGUAGES.ESQL) {
+          // ES|QL ALWAYS runs as asCurrentUser via the native _query endpoint —
+          // never through the MCP shared-identity path, regardless of the MCP flag.
+          const coreCtx = await ctx.core;
+          const esClient = coreCtx.elasticsearch.client.asCurrentUser;
+          result = await new QueryExecutorService(esClient, context.logger).execute(params);
+        } else if (context.mcpSearchProvider) {
           // MCP SEARCH path (queryCopilot.mcp.searchEnabled). RBAC: runs as the MCP
           // container's ES identity (Aryan), NOT asCurrentUser. If the MCP server is
           // unreachable the typed McpConnectionError/McpTimeoutError propagates to the
