@@ -2,11 +2,12 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useReducer,
   useRef,
 } from 'react';
-import { DEFAULT_INDEX_PATTERN, PROVIDER_NAMES } from '../../common';
+import { DEFAULT_INDEX_PATTERN, PIPELINE_CONFIG, PROVIDER_NAMES } from '../../common';
 import type { ConversationMessage, MaskedCredentials } from '../../common/types';
 import { ApiError, useServices } from '../services';
 import {
@@ -20,6 +21,7 @@ import {
   setQueryResults,
 } from './copilot.actions';
 import { copilotReducer, createInitialState } from './copilot.reducer';
+import { loadPersistedSession, persistSession, type PersistedSession } from './session.persistence';
 import type { CopilotAction, CopilotError, CopilotState } from './types';
 
 /** Generates a stable, reasonably-unique identifier. */
@@ -87,17 +89,59 @@ export interface CopilotProviderProps {
 export function CopilotProvider({ children, indexPattern, sessionId }: CopilotProviderProps) {
   const services = useServices();
 
-  const [state, dispatch] = useReducer(copilotReducer, undefined, () =>
-    createInitialState(indexPattern ?? DEFAULT_INDEX_PATTERN)
-  );
+  // Read the persisted session (if any) exactly once for the lifetime of the
+  // provider. Stored in a ref so re-renders never re-read sessionStorage.
+  const persistedRef = useRef<PersistedSession | null | undefined>(undefined);
+  if (persistedRef.current === undefined) {
+    persistedRef.current = loadPersistedSession();
+  }
 
-  // Stable session id for the lifetime of the provider.
-  const sessionIdRef = useRef<string>(sessionId ?? generateId());
+  const [state, dispatch] = useReducer(copilotReducer, undefined, (): CopilotState => {
+    const fresh = createInitialState(indexPattern ?? DEFAULT_INDEX_PATTERN);
+    const persisted = persistedRef.current;
+    if (persisted === null || persisted === undefined) {
+      return fresh;
+    }
+    // Restore only the durable session slice. credentialsStatus, providerState,
+    // isGenerating, error and queryResults keep their fresh defaults:
+    // credentials/providers reload from the server, and a session must NEVER
+    // hydrate with isGenerating=true (there is no in-flight request to finish).
+    return {
+      ...fresh,
+      conversation: persisted.conversation,
+      currentKQL: persisted.currentKQL,
+      validationResult: persisted.validationResult,
+      selectedDataViews: persisted.selectedDataViews,
+      timeRange: persisted.timeRange,
+      tokenUsage: persisted.tokenUsage,
+      estimatedCost: persisted.estimatedCost,
+      sessionTokenUsage: persisted.sessionTokenUsage,
+      sessionCostUsd: persisted.sessionCostUsd,
+    };
+  });
+
+  // Stable session id for the lifetime of the provider. A persisted id wins so
+  // the server-side conversation cache stays keyed to the restored session.
+  const sessionIdRef = useRef<string>(persistedRef.current?.sessionId ?? sessionId ?? generateId());
 
   // Keep a live reference to the latest state so callbacks can read current
   // values without being re-created (stable identities across renders).
   const stateRef = useRef<CopilotState>(state);
   stateRef.current = state;
+
+  // Persist the durable session slice to sessionStorage, debounced so bursts
+  // of dispatches (e.g. keystroke-driven KQL edits) coalesce into one write.
+  // Writes are skipped mid-generation to avoid churn while a request is in
+  // flight; the QUERY_SUCCESS/QUERY_ERROR state change triggers the write.
+  useEffect(() => {
+    if (state.isGenerating) {
+      return undefined;
+    }
+    const timer = setTimeout(() => {
+      persistSession(sessionIdRef.current, state);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [state]);
 
   const sendQuery = useCallback(
     async (query: string): Promise<void> => {
@@ -130,11 +174,18 @@ export function CopilotProvider({ children, indexPattern, sessionId }: CopilotPr
       dispatch(actionSendQuery(query));
 
       try {
+        // The server's /generate schema caps conversationHistory at
+        // PIPELINE_CONFIG.MAX_CONVERSATION_HISTORY messages and rejects empty
+        // message content, so send only the most recent non-empty messages —
+        // a restored long session would otherwise 400.
+        const conversationHistory = stateRef.current.conversation
+          .filter((msg) => msg.content.trim().length > 0)
+          .slice(-PIPELINE_CONFIG.MAX_CONVERSATION_HISTORY);
         const result = await services.queryApi.generateQuery({
           query,
           indexPattern: toIndexPattern(stateRef.current.selectedDataViews),
           sessionId: sessionIdRef.current,
-          conversationHistory: stateRef.current.conversation,
+          conversationHistory,
         });
         const assistantMsg: ConversationMessage = {
           id: generateId(),
