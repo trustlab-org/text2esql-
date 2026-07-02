@@ -417,19 +417,33 @@ export class QueryPipeline {
       });
 
       // ── 10. Estimate tokens & cost ────────────────────────────────────
+      // Prefer ACTUAL usage reported by the provider API (isActual: true) over
+      // re-estimating with the tokenizer; fall back to a tiktoken estimate when
+      // the adapter could not report real usage.
       const tEstimate = Date.now();
-      const promptEstimate = this.tokenEstimator.estimatePromptTokens(prompt, response.provider);
-      const responseEstimate = this.tokenEstimator.estimateResponseTokens(
-        response.content,
-        response.provider
-      );
-      const tokenEstimate: TokenEstimate = {
-        promptTokens: promptEstimate.totalTokens,
-        completionTokens: responseEstimate.totalTokens,
-        totalTokens: promptEstimate.totalTokens + responseEstimate.totalTokens,
-        estimatedAt: new Date().toISOString(),
-        isActual: false,
-      };
+      let tokenEstimate: TokenEstimate;
+      if (response.tokensUsed.isActual) {
+        tokenEstimate = {
+          promptTokens: response.tokensUsed.promptTokens,
+          completionTokens: response.tokensUsed.completionTokens,
+          totalTokens: response.tokensUsed.totalTokens,
+          estimatedAt: new Date().toISOString(),
+          isActual: true,
+        };
+      } else {
+        const promptEstimate = this.tokenEstimator.estimatePromptTokens(prompt, response.provider);
+        const responseEstimate = this.tokenEstimator.estimateResponseTokens(
+          response.content,
+          response.provider
+        );
+        tokenEstimate = {
+          promptTokens: promptEstimate.totalTokens,
+          completionTokens: responseEstimate.totalTokens,
+          totalTokens: promptEstimate.totalTokens + responseEstimate.totalTokens,
+          estimatedAt: new Date().toISOString(),
+          isActual: false,
+        };
+      }
       const costEstimate = this.estimateCost(tokenEstimate, response.provider);
       ctx.addStage({ stage: 'estimation', durationMs: Date.now() - tEstimate, success: true });
 
