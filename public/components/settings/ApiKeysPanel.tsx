@@ -3,32 +3,28 @@ import {
   EuiButton,
   EuiButtonEmpty,
   EuiCallOut,
-  EuiFieldPassword,
-  EuiFieldText,
   EuiForm,
-  EuiFormRow,
-  EuiSelect,
   EuiSpacer,
   EuiSwitch,
   EuiText,
   EuiTitle,
 } from '@elastic/eui';
-import type { EuiSelectOption } from '@elastic/eui';
 
 import type {
   MaskedProvider,
-  ProviderName,
   SaveCredentialInput,
   SaveCredentialsInput,
 } from '../../../common/types';
-import { ALL_PROVIDER_NAMES, PROVIDER_DEFAULT_MODELS, PROVIDER_NAMES } from '../../../common';
-import { providerDisplayName } from '../statusbar/provider_display';
+import { PROVIDER_NAMES } from '../../../common';
 import { useCredentials } from '../../hooks/useCredentials';
+import { ProviderCard, type ProviderSectionState } from './ProviderCard';
 
 /**
- * Settings form for the user's OWN primary (+ optional fallback) LLM credentials.
+ * Settings form for the user's OWN primary (+ optional fallback) LLM credentials,
+ * composed from provider-aware {@link ProviderCard}s (API key input, live
+ * connection status, discovered-model dropdown, refresh + test connection).
  *
- * Keys now live in encrypted SERVER-SIDE storage; the browser only ever handles
+ * Keys live in encrypted SERVER-SIDE storage; the browser only ever handles
  * MASKED metadata. The form prefills provider/model/endpoint from the masked
  * status and shows a "key set"/"no key set" indicator per slot, but the password
  * fields ALWAYS start empty (raw keys are never returned). Leaving a password
@@ -42,27 +38,14 @@ interface ApiKeysPanelProps {
   readonly onChange?: () => void;
 }
 
-const PROVIDER_OPTIONS: EuiSelectOption[] = ALL_PROVIDER_NAMES.map((name) => ({
-  value: name,
-  text: providerDisplayName(name as ProviderName),
-}));
+const DEFAULT_PROVIDER = PROVIDER_NAMES.ANTHROPIC;
 
-/** Editable form state for one provider section. */
-interface SectionState {
-  provider: ProviderName;
-  apiKey: string;
-  model: string;
-  endpoint: string;
-}
-
-const DEFAULT_PROVIDER: ProviderName = PROVIDER_NAMES.ANTHROPIC;
-
-function emptySection(): SectionState {
+function emptySection(): ProviderSectionState {
   return { provider: DEFAULT_PROVIDER, apiKey: '', model: '', endpoint: '' };
 }
 
 /** Seeds a section from masked status (provider/model/endpoint only — no key). */
-function sectionFromMasked(masked: MaskedProvider | null | undefined): SectionState {
+function sectionFromMasked(masked: MaskedProvider | null | undefined): ProviderSectionState {
   if (!masked) {
     return emptySection();
   }
@@ -78,7 +61,7 @@ function sectionFromMasked(masked: MaskedProvider | null | undefined): SectionSt
  * Builds a {@link SaveCredentialInput} from a section, omitting empty fields. An
  * empty apiKey is omitted so the server preserves the existing stored key.
  */
-function inputFromSection(section: SectionState): SaveCredentialInput {
+function inputFromSection(section: ProviderSectionState): SaveCredentialInput {
   const result: { -readonly [K in keyof SaveCredentialInput]: SaveCredentialInput[K] } = {
     provider: section.provider,
   };
@@ -111,9 +94,9 @@ function slotStatus(masked: MaskedProvider | null | undefined): string {
 export const ApiKeysPanel: React.FC<ApiKeysPanelProps> = ({ onClose, onChange }) => {
   const { status, save, clear, error: hookError } = useCredentials(onChange);
 
-  const [primary, setPrimary] = useState<SectionState>(emptySection);
+  const [primary, setPrimary] = useState<ProviderSectionState>(emptySection);
   const [fallbackEnabled, setFallbackEnabled] = useState<boolean>(false);
-  const [fallback, setFallback] = useState<SectionState>(emptySection);
+  const [fallback, setFallback] = useState<ProviderSectionState>(emptySection);
   const [error, setError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState<boolean>(false);
 
@@ -192,58 +175,6 @@ export const ApiKeysPanel: React.FC<ApiKeysPanelProps> = ({ onClose, onChange })
     }
   };
 
-  const renderSection = (
-    section: SectionState,
-    setSection: React.Dispatch<React.SetStateAction<SectionState>>,
-    keyPrefix: string
-  ): React.ReactNode => {
-    const isOllama = section.provider === PROVIDER_NAMES.OLLAMA;
-    return (
-      <>
-        <EuiFormRow label="Provider">
-          <EuiSelect
-            options={PROVIDER_OPTIONS}
-            value={section.provider}
-            onChange={(e) =>
-              setSection((s) => ({ ...s, provider: e.target.value as ProviderName }))
-            }
-            data-test-subj={`queryCopilot${keyPrefix}Provider`}
-          />
-        </EuiFormRow>
-        {isOllama ? (
-          <EuiFormRow label="Endpoint" helpText="Local Ollama endpoint (optional).">
-            <EuiFieldText
-              placeholder="http://localhost:11434"
-              value={section.endpoint}
-              onChange={(e) => setSection((s) => ({ ...s, endpoint: e.target.value }))}
-              data-test-subj={`queryCopilot${keyPrefix}Endpoint`}
-            />
-          </EuiFormRow>
-        ) : (
-          <EuiFormRow
-            label="API key"
-            helpText="Leave blank to keep your existing key. Keys are stored encrypted on the server."
-          >
-            <EuiFieldPassword
-              type="dual"
-              value={section.apiKey}
-              onChange={(e) => setSection((s) => ({ ...s, apiKey: e.target.value }))}
-              data-test-subj={`queryCopilot${keyPrefix}ApiKey`}
-            />
-          </EuiFormRow>
-        )}
-        <EuiFormRow label="Model" helpText="Optional; leave blank to use the default.">
-          <EuiFieldText
-            placeholder={PROVIDER_DEFAULT_MODELS[section.provider]}
-            value={section.model}
-            onChange={(e) => setSection((s) => ({ ...s, model: e.target.value }))}
-            data-test-subj={`queryCopilot${keyPrefix}Model`}
-          />
-        </EuiFormRow>
-      </>
-    );
-  };
-
   const displayError = error ?? hookError;
 
   return (
@@ -270,26 +201,32 @@ export const ApiKeysPanel: React.FC<ApiKeysPanelProps> = ({ onClose, onChange })
       )}
 
       <EuiForm component="form">
-        <EuiTitle size="xs">
-          <h4>Primary provider</h4>
-        </EuiTitle>
-        <EuiSpacer size="s" />
-        {renderSection(primary, setPrimary, 'Primary')}
+        <ProviderCard
+          slotLabel="Primary"
+          section={primary}
+          onChange={setPrimary}
+          hasStoredKey={primaryHasStoredKey}
+          keyPrefix="Primary"
+        />
 
         <EuiSpacer size="l" />
 
-        <EuiFormRow>
-          <EuiSwitch
-            label="Enable fallback provider"
-            checked={fallbackEnabled}
-            onChange={(e) => setFallbackEnabled(e.target.checked)}
-            data-test-subj="queryCopilotFallbackToggle"
-          />
-        </EuiFormRow>
+        <EuiSwitch
+          label="Enable fallback provider"
+          checked={fallbackEnabled}
+          onChange={(e) => setFallbackEnabled(e.target.checked)}
+          data-test-subj="queryCopilotFallbackToggle"
+        />
         {fallbackEnabled && (
           <>
-            <EuiSpacer size="s" />
-            {renderSection(fallback, setFallback, 'Fallback')}
+            <EuiSpacer size="m" />
+            <ProviderCard
+              slotLabel="Fallback"
+              section={fallback}
+              onChange={setFallback}
+              hasStoredKey={fallbackHasStoredKey}
+              keyPrefix="Fallback"
+            />
           </>
         )}
 

@@ -12,16 +12,23 @@ function makeServices(overrides: {
   getCredentials?: jest.Mock;
   saveCredentials?: jest.Mock;
   deleteCredentials?: jest.Mock;
+  discoverModels?: jest.Mock;
 }): {
   services: Services;
   saveCredentials: jest.Mock;
   deleteCredentials: jest.Mock;
+  discoverModels: jest.Mock;
 } {
   const saveCredentials = overrides.saveCredentials ?? jest.fn().mockResolvedValue(null);
   const deleteCredentials = overrides.deleteCredentials ?? jest.fn().mockResolvedValue(undefined);
+  // Model discovery is auto-triggered by the provider cards (stored key / ollama);
+  // default to an empty successful discovery so cards settle without a live server.
+  const discoverModels =
+    overrides.discoverModels ??
+    jest.fn().mockResolvedValue({ provider: 'anthropic', models: [] });
   const services = {
     queryApi: {},
-    providerApi: {},
+    providerApi: { discoverModels },
     benchmarkApi: {},
     credentialsApi: {
       getCredentials: overrides.getCredentials ?? jest.fn().mockRejectedValue(new Error('none')),
@@ -29,7 +36,7 @@ function makeServices(overrides: {
       deleteCredentials,
     },
   } as unknown as Services;
-  return { services, saveCredentials, deleteCredentials };
+  return { services, saveCredentials, deleteCredentials, discoverModels };
 }
 
 function renderPanel(services: Services, onClose: () => void = jest.fn()) {
