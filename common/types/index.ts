@@ -7,6 +7,7 @@ export type * from './dataview.types';
 export type * from './ecs.types';
 export type * from './execution.types';
 export type * from './intent.types';
+export type * from './model-discovery.types';
 export type * from './observability.types';
 export type * from './pipeline.types';
 export type * from './provider.types';
