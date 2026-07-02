@@ -4,7 +4,7 @@ import type { IRouter } from '@kbn/core/server';
 import { KQLSyntaxError } from '@kbn/es-query';
 import type { QueryCopilotContext } from '../types';
 import { QueryExecutorService } from '../services/execution';
-import { PLUGIN_ROUTE_PREFIX, QUERY_LANGUAGES } from '../../common';
+import { PLUGIN_ROUTE_PREFIX, QUERY_LANGUAGES, MAX_INDEX_PATTERN_LENGTH } from '../../common';
 
 /** Request body for POST /execute. */
 /**
@@ -24,7 +24,12 @@ const validateIndexPattern = (value: string): string | undefined => {
 
 const executeRequestBodySchema = schema.object({
   kql: schema.string({ minLength: 1, maxLength: 8192 }),
-  indexPattern: schema.string({ minLength: 1, maxLength: 256, validate: validateIndexPattern }),
+  // Sized for multi-data-view selections (comma-joined titles).
+  indexPattern: schema.string({
+    minLength: 1,
+    maxLength: MAX_INDEX_PATTERN_LENGTH,
+    validate: validateIndexPattern,
+  }),
   timeRange: schema.maybe(
     schema.object({
       from: schema.string({ minLength: 1 }),

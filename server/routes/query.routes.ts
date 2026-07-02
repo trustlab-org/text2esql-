@@ -9,6 +9,7 @@ import {
   QUERY_LANGUAGES,
   PIPELINE_CONFIG,
   ERROR_CODES,
+  MAX_INDEX_PATTERN_LENGTH,
 } from '../../common';
 
 const providerLiteral = schema.oneOf([
@@ -44,7 +45,8 @@ const conversationMessageSchema = schema.object({
  */
 const queryGenerationRequestBodySchema = schema.object({
   query: schema.string({ minLength: 3, maxLength: PIPELINE_CONFIG.MAX_QUERY_LENGTH_CHARS }),
-  indexPattern: schema.string({ minLength: 1, maxLength: 256 }),
+  // Sized for multi-data-view selections (comma-joined titles).
+  indexPattern: schema.string({ minLength: 1, maxLength: MAX_INDEX_PATTERN_LENGTH }),
   sessionId: schema.string({ minLength: 1, maxLength: 256 }),
   requestedLanguage: schema.maybe(
     schema.nullable(

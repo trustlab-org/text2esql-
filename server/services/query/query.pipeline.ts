@@ -27,6 +27,7 @@ import {
   ERROR_CODES,
   ERROR_SEVERITY,
   PROVIDER_NAMES,
+  PROVIDER_DEFAULT_MODELS,
   OBSERVABILITY_EVENT_TYPES,
 } from '../../../common/constants';
 import type { ErrorCode } from '../../../common/constants';
@@ -700,7 +701,14 @@ export class QueryPipeline {
   /** Estimates cost, defensively (cost estimation must not break the pipeline). */
   private estimateCost(tokenEstimate: TokenEstimate, provider: ProviderName): CostEstimate {
     try {
-      return this.costEstimator.estimate(tokenEstimate, provider, '');
+      // The routed response does not carry its model id, so price against the
+      // provider's default-model rate card. An empty model would miss both the
+      // exact and wildcard pricing keys and silently price everything at $0.
+      return this.costEstimator.estimate(
+        tokenEstimate,
+        provider,
+        PROVIDER_DEFAULT_MODELS[provider]
+      );
     } catch {
       return this.zeroCostEstimate(provider);
     }

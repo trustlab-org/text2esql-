@@ -8,6 +8,7 @@ import {
   type EuiComboBoxOptionOption,
 } from '@elastic/eui';
 
+import { MAX_INDEX_PATTERN_LENGTH } from '../../../common';
 import { useCopilot } from '../../store/copilot.context';
 import { useDataViews } from '../../hooks/useDataViews';
 import { setSelectedDataViews } from '../../store/copilot.actions';
@@ -61,10 +62,19 @@ export const DataViewSelector: React.FC = () => {
     (title) => options.find((option) => option.value === title) ?? { label: title, value: title }
   );
 
+  // The selection travels as ONE comma-joined `indexPattern` wire field, which
+  // the server caps at MAX_INDEX_PATTERN_LENGTH — reject additions that would
+  // exceed it here so an oversized selection fails visibly instead of 400ing.
+  const fitsWireLimit = (titles: readonly string[]): boolean =>
+    titles.join(',').length <= MAX_INDEX_PATTERN_LENGTH;
+
   const handleChange = (selected: Array<EuiComboBoxOptionOption<string>>): void => {
     const titles = selected
       .map((option) => (option.value ?? option.label).trim())
       .filter((title) => title.length > 0);
+    if (!fitsWireLimit(titles) && titles.length > state.selectedDataViews.length) {
+      return; // Ignore additions past the limit; removals always go through.
+    }
     dispatch(setSelectedDataViews(titles));
   };
 
@@ -74,7 +84,11 @@ export const DataViewSelector: React.FC = () => {
       return false;
     }
     if (!state.selectedDataViews.includes(pattern)) {
-      dispatch(setSelectedDataViews([...state.selectedDataViews, pattern]));
+      const next = [...state.selectedDataViews, pattern];
+      if (!fitsWireLimit(next)) {
+        return false;
+      }
+      dispatch(setSelectedDataViews(next));
     }
     return true;
   };

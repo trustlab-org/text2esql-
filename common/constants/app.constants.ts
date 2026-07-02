@@ -11,6 +11,14 @@ export const PLUGIN_ROUTE_PREFIX = '/api/query_copilot' as const;
  */
 export const DEFAULT_INDEX_PATTERN = 'fosstlsoc-logs-*' as const;
 
+/**
+ * Maximum length of the `indexPattern` wire field on the generate/execute
+ * routes. Sized for a multi-data-view selection (comma-joined titles) while
+ * still bounding request input; the data-view picker enforces the same limit
+ * client-side so a large selection fails visibly there, not with a 400.
+ */
+export const MAX_INDEX_PATTERN_LENGTH = 1024;
+
 export const INVESTIGATION_TYPES = {
   BRUTE_FORCE: 'brute_force',
   PRIVILEGE_ESCALATION: 'privilege_escalation',
