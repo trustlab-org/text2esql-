@@ -1,21 +1,26 @@
 import React from 'react';
-import { EuiBadge } from '@elastic/eui';
+import { EuiBadge, EuiToolTip } from '@elastic/eui';
 
 import { useCopilot } from '../../store/copilot.context';
 
 /**
- * Shows the total token usage of the most recent query. Renders nothing until a
- * query has produced a token estimate.
+ * Shows the CUMULATIVE token usage of the whole session, accumulated in the
+ * reducer on every successful generation (so it updates after every request
+ * without a refresh). Renders nothing until at least one request has completed.
  */
 export const TokensBadge: React.FC = () => {
   const { state } = useCopilot();
-  const tokenUsage = state.tokenUsage;
-  if (tokenUsage === null) {
+  const usage = state.sessionTokenUsage;
+  if (usage.requests === 0) {
     return null;
   }
   return (
-    <EuiBadge color="hollow" data-test-subj="queryCopilotTokensBadge">
-      {`Tokens Used: ${tokenUsage.totalTokens}`}
-    </EuiBadge>
+    <EuiToolTip
+      content={`Prompt ${usage.promptTokens} · Completion ${usage.completionTokens} · ${usage.requests} requests`}
+    >
+      <EuiBadge color="hollow" data-test-subj="queryCopilotTokensBadge">
+        {`Session tokens: ${usage.totalTokens}`}
+      </EuiBadge>
+    </EuiToolTip>
   );
 };

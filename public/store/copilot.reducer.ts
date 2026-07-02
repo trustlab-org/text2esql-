@@ -22,6 +22,8 @@ export function createInitialState(indexPattern: string): CopilotState {
     // logs are older than a few minutes; the time picker overrides this.
     timeRange: { from: 'now-24h', to: 'now' },
     credentialsStatus: null,
+    sessionTokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, requests: 0 },
+    sessionCostUsd: 0,
   };
 }
 
@@ -53,6 +55,17 @@ export function copilotReducer(state: CopilotState, action: CopilotAction): Copi
         tokenUsage: action.result.tokenEstimate,
         estimatedCost: action.result.costEstimate,
         conversation: [...state.conversation, action.assistantMessage],
+        // Accumulate per-request usage into the session totals so the status
+        // bar counters update after every request without a refresh.
+        sessionTokenUsage: {
+          promptTokens:
+            state.sessionTokenUsage.promptTokens + action.result.tokenEstimate.promptTokens,
+          completionTokens:
+            state.sessionTokenUsage.completionTokens + action.result.tokenEstimate.completionTokens,
+          totalTokens: state.sessionTokenUsage.totalTokens + action.result.tokenEstimate.totalTokens,
+          requests: state.sessionTokenUsage.requests + 1,
+        },
+        sessionCostUsd: state.sessionCostUsd + action.result.costEstimate.totalCostUsd,
       };
 
     case COPILOT_ACTION_TYPES.QUERY_ERROR:

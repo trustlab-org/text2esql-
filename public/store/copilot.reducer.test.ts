@@ -38,7 +38,7 @@ function message(id: string, content = 'hi'): ConversationMessage {
   };
 }
 
-const tokenEstimate = { totalTokens: 42 } as TokenEstimate;
+const tokenEstimate = { promptTokens: 30, completionTokens: 12, totalTokens: 42 } as TokenEstimate;
 const costEstimate = { provider: 'openai', model: 'gpt', totalCostUsd: 1 } as unknown as CostEstimate;
 const validationResult = { isValid: true } as ValidationResult;
 
@@ -70,6 +70,8 @@ describe('copilotReducer', () => {
       indexPattern: 'logs-*',
       timeRange: { from: 'now-24h', to: 'now' },
       credentialsStatus: null,
+      sessionTokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, requests: 0 },
+      sessionCostUsd: 0,
     });
   });
 
@@ -119,6 +121,30 @@ describe('copilotReducer', () => {
     expect(next.tokenUsage).toBe(tokenEstimate);
     expect(next.estimatedCost).toBe(costEstimate);
     expect(next.conversation).toEqual([msg]);
+  });
+
+  it('QUERY_SUCCESS accumulates session token usage and cost across requests', () => {
+    const msg = { ...message('a1'), role: 'assistant' as const };
+    const once = copilotReducer(
+      createInitialState('*'),
+      querySuccess(successResult('event.action: login'), msg)
+    );
+    expect(once.sessionTokenUsage).toEqual({
+      promptTokens: 30,
+      completionTokens: 12,
+      totalTokens: 42,
+      requests: 1,
+    });
+    expect(once.sessionCostUsd).toBe(1);
+
+    const twice = copilotReducer(once, querySuccess(successResult('event.action: login'), msg));
+    expect(twice.sessionTokenUsage).toEqual({
+      promptTokens: 60,
+      completionTokens: 24,
+      totalTokens: 84,
+      requests: 2,
+    });
+    expect(twice.sessionCostUsd).toBe(2);
   });
 
   it('QUERY_SUCCESS keeps current KQL when finalQuery is null', () => {

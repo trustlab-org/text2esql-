@@ -51,6 +51,18 @@ export interface CopilotState {
    * loaded / not configured. Used to gate generation and drive the no-key banner.
    */
   readonly credentialsStatus: MaskedCredentials | null;
+  /**
+   * Cumulative token usage for the whole session, accumulated on every
+   * successful generation. Cleared by RESET_SESSION.
+   */
+  readonly sessionTokenUsage: {
+    readonly promptTokens: number;
+    readonly completionTokens: number;
+    readonly totalTokens: number;
+    readonly requests: number;
+  };
+  /** Cumulative estimated USD cost for the whole session. Cleared by RESET_SESSION. */
+  readonly sessionCostUsd: number;
 }
 
 /**
