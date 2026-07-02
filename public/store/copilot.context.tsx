@@ -30,6 +30,16 @@ function generateId(): string {
   return `session-${Date.now()}`;
 }
 
+/**
+ * Derives the Elasticsearch wire pattern from the selected data-view titles:
+ * a comma-joined list (ES natively accepts comma-separated index patterns),
+ * falling back to {@link DEFAULT_INDEX_PATTERN} when nothing is selected.
+ */
+export function toIndexPattern(views: readonly string[]): string {
+  const nonEmpty = views.filter((view) => view.trim().length > 0);
+  return nonEmpty.length > 0 ? nonEmpty.join(',') : DEFAULT_INDEX_PATTERN;
+}
+
 /** Builds a {@link CopilotError} from any thrown value. */
 function toCopilotError(error: unknown): CopilotError {
   if (error instanceof ApiError) {
@@ -122,7 +132,7 @@ export function CopilotProvider({ children, indexPattern, sessionId }: CopilotPr
       try {
         const result = await services.queryApi.generateQuery({
           query,
-          indexPattern: stateRef.current.indexPattern,
+          indexPattern: toIndexPattern(stateRef.current.selectedDataViews),
           sessionId: sessionIdRef.current,
           conversationHistory: stateRef.current.conversation,
         });
@@ -158,7 +168,7 @@ export function CopilotProvider({ children, indexPattern, sessionId }: CopilotPr
     try {
       const results = await services.queryApi.executeQuery(
         kql,
-        stateRef.current.indexPattern,
+        toIndexPattern(stateRef.current.selectedDataViews),
         stateRef.current.timeRange,
         stateRef.current.validationResult?.language
       );

@@ -16,7 +16,7 @@ import {
   resetSession,
   sendQuery,
   setGenerating,
-  setIndexPattern,
+  setSelectedDataViews,
   setProviderState,
   setQueryResults,
   setTimeRange,
@@ -67,7 +67,7 @@ describe('copilotReducer', () => {
       isGenerating: false,
       error: null,
       queryResults: null,
-      indexPattern: 'logs-*',
+      selectedDataViews: ['logs-*'],
       timeRange: { from: 'now-24h', to: 'now' },
       credentialsStatus: null,
       sessionTokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, requests: 0 },
@@ -88,16 +88,16 @@ describe('copilotReducer', () => {
   });
 
   it('INITIAL_COPILOT_STATE defaults to the configured default index pattern', () => {
-    expect(INITIAL_COPILOT_STATE.indexPattern).toBe(DEFAULT_INDEX_PATTERN);
-    expect(INITIAL_COPILOT_STATE.indexPattern).toBe('fosstlsoc-logs-*');
+    expect(INITIAL_COPILOT_STATE.selectedDataViews).toEqual([DEFAULT_INDEX_PATTERN]);
+    expect(INITIAL_COPILOT_STATE.selectedDataViews).toEqual(['fosstlsoc-logs-*']);
   });
 
-  it('SET_INDEX_PATTERN updates the index pattern', () => {
+  it('SET_SELECTED_DATA_VIEWS replaces the selected data views', () => {
     const next = copilotReducer(
       createInitialState('*'),
-      setIndexPattern('fosstlsoc-logs-2026')
+      setSelectedDataViews(['fosstlsoc-logs-2026', 'metrics-*'])
     );
-    expect(next.indexPattern).toBe('fosstlsoc-logs-2026');
+    expect(next.selectedDataViews).toEqual(['fosstlsoc-logs-2026', 'metrics-*']);
   });
 
   it('SEND_QUERY sets isGenerating and clears error', () => {
@@ -207,7 +207,7 @@ describe('copilotReducer', () => {
     expect(next.isGenerating).toBe(false);
   });
 
-  it('RESET_SESSION clears everything but preserves the index pattern', () => {
+  it('RESET_SESSION clears everything but preserves the data-view selection', () => {
     const dirty: CopilotState = {
       ...createInitialState('logs-*'),
       currentKQL: 'x',

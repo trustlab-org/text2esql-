@@ -2,9 +2,9 @@ import { DEFAULT_INDEX_PATTERN } from '../../common';
 import { COPILOT_ACTION_TYPES, type CopilotAction, type CopilotState } from './types';
 
 /**
- * Builds a fresh session state for the given index pattern. Used both for the
- * default initial state and to reset a session while preserving its index
- * pattern.
+ * Builds a fresh session state seeded with the given index pattern (as the sole
+ * selected data view). Used both for the default initial state and to reset a
+ * session while preserving its data-view selection.
  */
 export function createInitialState(indexPattern: string): CopilotState {
   return {
@@ -17,7 +17,7 @@ export function createInitialState(indexPattern: string): CopilotState {
     isGenerating: false,
     error: null,
     queryResults: null,
-    indexPattern,
+    selectedDataViews: [indexPattern],
     // Default to the last 24 hours so results show even when the most recent
     // logs are older than a few minutes; the time picker overrides this.
     timeRange: { from: 'now-24h', to: 'now' },
@@ -95,16 +95,21 @@ export function copilotReducer(state: CopilotState, action: CopilotAction): Copi
     case COPILOT_ACTION_TYPES.SET_TIME_RANGE:
       return { ...state, timeRange: action.timeRange };
 
-    case COPILOT_ACTION_TYPES.SET_INDEX_PATTERN:
-      return { ...state, indexPattern: action.indexPattern };
+    case COPILOT_ACTION_TYPES.SET_SELECTED_DATA_VIEWS:
+      return { ...state, selectedDataViews: action.dataViews };
 
     case COPILOT_ACTION_TYPES.SET_CREDENTIALS_STATUS:
       return { ...state, credentialsStatus: action.status };
 
     case COPILOT_ACTION_TYPES.RESET_SESSION:
-      // Preserve the server-loaded credential status across a session reset; it
-      // reflects stored server state, not per-session conversation state.
-      return { ...createInitialState(state.indexPattern), credentialsStatus: state.credentialsStatus };
+      // Preserve the server-loaded credential status AND the data-view selection
+      // across a session reset; both reflect durable user/server state, not
+      // per-session conversation state.
+      return {
+        ...createInitialState(DEFAULT_INDEX_PATTERN),
+        selectedDataViews: state.selectedDataViews,
+        credentialsStatus: state.credentialsStatus,
+      };
 
     default:
       assertNever(action);

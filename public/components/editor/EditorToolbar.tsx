@@ -2,17 +2,16 @@ import React from 'react';
 import {
   EuiButton,
   EuiButtonEmpty,
-  EuiFieldText,
   EuiFlexGroup,
   EuiFlexItem,
   EuiSuperDatePicker,
   type OnTimeChangeProps,
 } from '@elastic/eui';
 
-import { DEFAULT_INDEX_PATTERN } from '../../../common';
-import { useCopilot } from '../../store/copilot.context';
+import { toIndexPattern, useCopilot } from '../../store/copilot.context';
 import { useQueryExecution } from '../../hooks/useQueryExecution';
-import { setIndexPattern, setTimeRange } from '../../store/copilot.actions';
+import { setTimeRange } from '../../store/copilot.actions';
+import { DataViewSelector } from './DataViewSelector';
 
 export interface EditorToolbarProps {
   isEditing: boolean;
@@ -23,6 +22,9 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ isEditing, onToggl
   const { state, dispatch } = useCopilot();
   const { executeQuery, isExecuting } = useQueryExecution();
 
+  // Comma-joined wire pattern targeting ALL selected data views.
+  const indexPattern = toIndexPattern(state.selectedDataViews);
+
   // Commit the selected window to state and, when there is a query to run,
   // immediately re-execute it against the new range for an interactive feel.
   const handleTimeChange = ({ start, end }: OnTimeChangeProps): void => {
@@ -30,7 +32,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ isEditing, onToggl
     if (state.currentKQL.trim().length > 0) {
       void executeQuery(
         state.currentKQL,
-        state.indexPattern,
+        indexPattern,
         { from: start, to: end },
         state.validationResult?.language
       );
@@ -44,16 +46,8 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ isEditing, onToggl
       justifyContent="flexEnd"
       responsive={false}
     >
-      <EuiFlexItem grow={false} style={{ width: 240 }}>
-        <EuiFieldText
-          compressed
-          prepend="Index"
-          value={state.indexPattern}
-          onChange={(e) => dispatch(setIndexPattern(e.target.value))}
-          placeholder={DEFAULT_INDEX_PATTERN}
-          aria-label="Index pattern"
-          data-test-subj="queryCopilotIndexPatternField"
-        />
+      <EuiFlexItem grow={false} style={{ width: 360 }}>
+        <DataViewSelector />
       </EuiFlexItem>
       <EuiFlexItem grow>
         <EuiSuperDatePicker
@@ -67,7 +61,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ isEditing, onToggl
             dispatch(setTimeRange({ from: start, to: end }));
             void executeQuery(
         state.currentKQL,
-        state.indexPattern,
+        indexPattern,
         { from: start, to: end },
         state.validationResult?.language
       );
@@ -97,7 +91,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ isEditing, onToggl
           onClick={() => {
             void executeQuery(
               state.currentKQL,
-              state.indexPattern,
+              indexPattern,
               state.timeRange,
               state.validationResult?.language
             );

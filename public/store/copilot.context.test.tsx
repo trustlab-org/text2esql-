@@ -48,6 +48,7 @@ function makeServices(overrides: {
       saveCredentials: jest.fn(),
       deleteCredentials: jest.fn(),
     },
+    dataViewsApi: { getDataViews: jest.fn().mockResolvedValue({ dataViews: [] }) },
   } as unknown as Services;
 }
 

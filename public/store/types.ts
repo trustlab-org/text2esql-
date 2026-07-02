@@ -44,7 +44,12 @@ export interface CopilotState {
   readonly isGenerating: boolean;
   readonly error: CopilotError | null;
   readonly queryResults: QueryExecutionResponse | null;
-  readonly indexPattern: string;
+  /**
+   * Index-pattern titles of the selected data views (e.g. `["logs-*", "metrics-*"]`).
+   * Order is preserved and entries are non-empty strings; generation/execution
+   * target the comma-joined pattern (see `toIndexPattern`).
+   */
+  readonly selectedDataViews: readonly string[];
   readonly timeRange: TimeRange;
   /**
    * Masked status of the user's server-stored LLM credentials, or null when not
@@ -85,7 +90,7 @@ export const COPILOT_ACTION_TYPES = {
   SET_VALIDATION_RESULT: 'SET_VALIDATION_RESULT',
   SET_QUERY_RESULTS: 'SET_QUERY_RESULTS',
   SET_TIME_RANGE: 'SET_TIME_RANGE',
-  SET_INDEX_PATTERN: 'SET_INDEX_PATTERN',
+  SET_SELECTED_DATA_VIEWS: 'SET_SELECTED_DATA_VIEWS',
   SET_CREDENTIALS_STATUS: 'SET_CREDENTIALS_STATUS',
 } as const;
 
@@ -148,9 +153,9 @@ export interface SetTimeRangeAction {
   readonly timeRange: TimeRange;
 }
 
-export interface SetIndexPatternAction {
-  readonly type: typeof COPILOT_ACTION_TYPES.SET_INDEX_PATTERN;
-  readonly indexPattern: string;
+export interface SetSelectedDataViewsAction {
+  readonly type: typeof COPILOT_ACTION_TYPES.SET_SELECTED_DATA_VIEWS;
+  readonly dataViews: readonly string[];
 }
 
 export interface SetCredentialsStatusAction {
@@ -171,5 +176,5 @@ export type CopilotAction =
   | SetValidationResultAction
   | SetQueryResultsAction
   | SetTimeRangeAction
-  | SetIndexPatternAction
+  | SetSelectedDataViewsAction
   | SetCredentialsStatusAction;

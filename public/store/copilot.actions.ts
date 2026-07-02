@@ -19,7 +19,7 @@ import {
   type SetCredentialsStatusAction,
   type SetGeneratingAction,
   type SetProviderStateAction,
-  type SetIndexPatternAction,
+  type SetSelectedDataViewsAction,
   type SetQueryResultsAction,
   type SetTimeRangeAction,
   type SetValidationResultAction,
@@ -85,9 +85,14 @@ export function setTimeRange(timeRange: TimeRange): SetTimeRangeAction {
   return { type: COPILOT_ACTION_TYPES.SET_TIME_RANGE, timeRange };
 }
 
-/** Replaces the index pattern used for query generation and execution. */
-export function setIndexPattern(indexPattern: string): SetIndexPatternAction {
-  return { type: COPILOT_ACTION_TYPES.SET_INDEX_PATTERN, indexPattern };
+/**
+ * Replaces the selected data views (index-pattern titles) used for query
+ * generation and execution.
+ */
+export function setSelectedDataViews(
+  dataViews: readonly string[]
+): SetSelectedDataViewsAction {
+  return { type: COPILOT_ACTION_TYPES.SET_SELECTED_DATA_VIEWS, dataViews };
 }
 
 /** Stores the masked credential status loaded from the server (or null). */
