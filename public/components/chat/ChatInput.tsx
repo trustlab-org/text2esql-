@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { EuiFieldText, EuiButtonIcon, EuiText, useEuiTheme, transparentize } from '@elastic/eui';
 import { css } from '@emotion/react';
 
+import { useTokenEstimate } from '../../hooks/useTokenEstimate';
+import { useCopilot } from '../../store/copilot.context';
+
 interface ChatInputProps {
   onSend: (text: string) => void;
   isGenerating: boolean;
@@ -31,6 +34,8 @@ const CONTROL_SIZE = 40;
 export const ChatInput: React.FC<ChatInputProps> = ({ onSend, isGenerating, disabled }) => {
   const { euiTheme } = useEuiTheme();
   const [value, setValue] = useState('');
+  const { state } = useCopilot();
+  const { estimate } = useTokenEstimate(value);
 
   const handleSend = () => {
     const trimmed = value.trim();
@@ -91,6 +96,30 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend, isGenerating, disa
 
   const isSendDisabled = isGenerating || Boolean(disabled) || !value.trim();
 
+  // One-line summary under the composer. The line always renders (no layout
+  // jumps) and switches content: a live pre-flight estimate while typing, the
+  // last request's usage when the input is empty, or the plain Enter hint.
+  const hasText = value.trim().length > 0;
+  let hintLine: React.ReactNode = 'Press Enter to send';
+  if (hasText && estimate !== null) {
+    const t = estimate.tokenEstimate;
+    hintLine = (
+      <span data-test-subj="queryCopilotTokenEstimateLine">
+        {`Estimated — Input: ${t.promptTokens} · Output: ~${t.completionTokens} · Total: ~${t.totalTokens} tokens`}
+      </span>
+    );
+  } else if (!hasText && state.tokenUsage !== null) {
+    const usage = state.tokenUsage;
+    const label = usage.isActual ? 'actual' : 'estimated';
+    const cost =
+      state.estimatedCost !== null ? ` · $${state.estimatedCost.totalCostUsd.toFixed(4)}` : '';
+    hintLine = (
+      <span data-test-subj="queryCopilotTokenUsageLine">
+        {`Last request (${label}) — Prompt: ${usage.promptTokens} · Completion: ${usage.completionTokens} · Total: ${usage.totalTokens} tokens${cost}`}
+      </span>
+    );
+  }
+
   return (
     <>
       <div css={composerCss} data-test-subj="queryCopilotChatInput">
@@ -118,7 +147,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend, isGenerating, disa
         />
       </div>
       <EuiText size="xs" color="subdued" css={css({ marginTop: euiTheme.size.xs })}>
-        Press Enter to send
+        {hintLine}
       </EuiText>
     </>
   );
