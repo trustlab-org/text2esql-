@@ -3,6 +3,7 @@ export type * from './benchmark.types';
 export type * from './cache.types';
 export type * from './cost.types';
 export type * from './credentials.types';
+export type * from './dataview.types';
 export type * from './ecs.types';
 export type * from './execution.types';
 export type * from './intent.types';
