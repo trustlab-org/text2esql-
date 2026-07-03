@@ -143,8 +143,14 @@ export function registerModelsRoutes(router: IRouter, context: QueryCopilotConte
         return response.ok({ headers, body: responseBody });
       } catch (error) {
         if (error instanceof ModelDiscoveryError) {
+          // Clamp auth-ish statuses to 400: a 401/403 from this route would be
+          // interpreted by Kibana's browser HTTP interceptor as an expired
+          // KIBANA session and log the user out. Provider-key failures are a
+          // request error, never a Kibana authentication failure.
+          const statusCode =
+            error.statusCode === 401 || error.statusCode === 403 ? 400 : error.statusCode;
           return response.customError({
-            statusCode: error.statusCode,
+            statusCode,
             headers,
             body: { message: error.message, attributes: { requestId } },
           });

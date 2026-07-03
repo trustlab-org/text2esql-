@@ -282,7 +282,11 @@ export class ModelDiscoveryService {
   /** Maps an upstream HTTP status to a normalised ModelDiscoveryError. */
   private errorForHttpStatus(status: number): ModelDiscoveryError {
     if (status === 401 || status === 403) {
-      return new ModelDiscoveryError(401, 'Invalid or unauthorized API key.');
+      // Deliberately surfaced as 400, NOT 401/403: Kibana's browser HTTP
+      // interceptor treats a 401 from any Kibana API as an expired Kibana
+      // session and redirects the user to the login screen. A bad PROVIDER
+      // key is a client error on this request, not a Kibana auth failure.
+      return new ModelDiscoveryError(400, 'Invalid or unauthorized API key.');
     }
     if (status === 429) {
       return new ModelDiscoveryError(429, 'Provider rate limit exceeded — try again shortly.');
