@@ -1,6 +1,7 @@
 import type {
   ConversationMessage,
   MaskedCredentials,
+  ProviderName,
   ProviderStatus,
   QueryExecutionResponse,
   QueryGenerationResponse,
@@ -18,6 +19,7 @@ import {
   type SendQueryAction,
   type SetCredentialsStatusAction,
   type SetGeneratingAction,
+  type SetPreferredProviderAction,
   type SetProviderStateAction,
   type SetSelectedDataViewsAction,
   type SetQueryResultsAction,
@@ -100,4 +102,11 @@ export function setCredentialsStatus(
   status: MaskedCredentials | null
 ): SetCredentialsStatusAction {
   return { type: COPILOT_ACTION_TYPES.SET_CREDENTIALS_STATUS, status };
+}
+
+/** Pins the provider used for generation, or null for automatic routing. */
+export function setPreferredProvider(
+  provider: ProviderName | null
+): SetPreferredProviderAction {
+  return { type: COPILOT_ACTION_TYPES.SET_PREFERRED_PROVIDER, provider };
 }

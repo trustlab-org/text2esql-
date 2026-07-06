@@ -2,10 +2,7 @@
   "id": "queryCopilot",
   "version": "1.0.0",
   "kibanaVersion": "kibana",
-  "owner": {
-    "name": "HackieChan",
-    "githubTeam": "HackieChan"
-  },
+  "owner": { "name": "HackieChan", "githubTeam": "HackieChan" },
   "description": "",
   "server": true,
   "ui": true,

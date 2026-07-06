@@ -2,6 +2,7 @@ import type {
   ConversationMessage,
   CostEstimate,
   MaskedCredentials,
+  ProviderName,
   ProviderStatus,
   QueryExecutionResponse,
   QueryGenerationResponse,
@@ -68,6 +69,12 @@ export interface CopilotState {
   };
   /** Cumulative estimated USD cost for the whole session. Cleared by RESET_SESSION. */
   readonly sessionCostUsd: number;
+  /**
+   * Provider the user pinned via the main-screen LLM selector, or null for the
+   * automatic Primary → Fallback routing order. Sent as `preferredProvider` on
+   * generation requests; the server still falls back if the pin fails.
+   */
+  readonly preferredProvider: ProviderName | null;
 }
 
 /**
@@ -92,6 +99,7 @@ export const COPILOT_ACTION_TYPES = {
   SET_TIME_RANGE: 'SET_TIME_RANGE',
   SET_SELECTED_DATA_VIEWS: 'SET_SELECTED_DATA_VIEWS',
   SET_CREDENTIALS_STATUS: 'SET_CREDENTIALS_STATUS',
+  SET_PREFERRED_PROVIDER: 'SET_PREFERRED_PROVIDER',
 } as const;
 
 export type CopilotActionType =
@@ -163,6 +171,11 @@ export interface SetCredentialsStatusAction {
   readonly status: MaskedCredentials | null;
 }
 
+export interface SetPreferredProviderAction {
+  readonly type: typeof COPILOT_ACTION_TYPES.SET_PREFERRED_PROVIDER;
+  readonly provider: ProviderName | null;
+}
+
 /** Discriminated union of every copilot action. */
 export type CopilotAction =
   | SendQueryAction
@@ -177,4 +190,5 @@ export type CopilotAction =
   | SetQueryResultsAction
   | SetTimeRangeAction
   | SetSelectedDataViewsAction
-  | SetCredentialsStatusAction;
+  | SetCredentialsStatusAction
+  | SetPreferredProviderAction;

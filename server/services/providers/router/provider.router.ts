@@ -2,6 +2,7 @@ import type { ProviderName } from '../../../../common';
 import type { ILLMProvider, ProviderPrompt, ProviderResponse } from '../types';
 import {
   ProviderError,
+  ProviderAuthError,
   ProviderRateLimitError,
   ProviderUnavailableError,
   ProviderTimeoutError,
@@ -56,9 +57,11 @@ interface RouteAttempt {
 //   ProviderRateLimitError   — provider is busy, try next
 //   ProviderUnavailableError — provider is down, try next
 //   ProviderTimeoutError     — transient, try next
+//   ProviderAuthError        — THIS provider's key is bad/expired; keys are
+//                              per-provider (per-user settings), so the next
+//                              provider in the chain may still succeed
 //
 // Errors that abort immediately (no fallback):
-//   ProviderAuthError            — misconfiguration, operator action required
 //   ProviderContextOverflowError — prompt too large, caller must reduce input
 // ---------------------------------------------------------------------------
 
@@ -260,14 +263,19 @@ export class ProviderRouter {
   /**
    * Determines if a ProviderError should trigger a fallback to the next provider.
    *
-   * Fallback on:  RateLimitError, UnavailableError, TimeoutError (all retryable by nature)
-   * Abort on:     AuthError (config issue), ContextOverflowError (input issue)
+   * Fallback on:  RateLimitError, UnavailableError, TimeoutError, AuthError.
+   * AuthError falls back because API keys are configured PER PROVIDER (each
+   * user's own keys in Settings): an invalid/expired primary key says nothing
+   * about the fallback provider's key, which is exactly the case the fallback
+   * slot exists for.
+   * Abort on:     ContextOverflowError (input issue — no provider can take it)
    */
   private isFallbackable(error: ProviderError): boolean {
     return (
       error instanceof ProviderRateLimitError ||
       error instanceof ProviderUnavailableError ||
-      error instanceof ProviderTimeoutError
+      error instanceof ProviderTimeoutError ||
+      error instanceof ProviderAuthError
     );
   }
 

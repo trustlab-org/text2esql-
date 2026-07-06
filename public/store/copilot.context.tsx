@@ -117,6 +117,7 @@ export function CopilotProvider({ children, indexPattern, sessionId }: CopilotPr
       estimatedCost: persisted.estimatedCost,
       sessionTokenUsage: persisted.sessionTokenUsage,
       sessionCostUsd: persisted.sessionCostUsd,
+      preferredProvider: persisted.preferredProvider ?? null,
     };
   });
 
@@ -186,6 +187,11 @@ export function CopilotProvider({ children, indexPattern, sessionId }: CopilotPr
           indexPattern: toIndexPattern(stateRef.current.selectedDataViews),
           sessionId: sessionIdRef.current,
           conversationHistory,
+          // Pin routing to the user's main-screen LLM selection when set; the
+          // server still falls back down the chain if the pinned provider fails.
+          ...(stateRef.current.preferredProvider
+            ? { preferredProvider: stateRef.current.preferredProvider }
+            : {}),
         });
         const assistantMsg: ConversationMessage = {
           id: generateId(),

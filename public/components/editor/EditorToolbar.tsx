@@ -11,7 +11,6 @@ import {
 import { toIndexPattern, useCopilot } from '../../store/copilot.context';
 import { useQueryExecution } from '../../hooks/useQueryExecution';
 import { setTimeRange } from '../../store/copilot.actions';
-import { DataViewSelector } from './DataViewSelector';
 
 export interface EditorToolbarProps {
   isEditing: boolean;
@@ -46,9 +45,6 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({ isEditing, onToggl
       justifyContent="flexEnd"
       responsive={false}
     >
-      <EuiFlexItem grow={false} style={{ width: 360 }}>
-        <DataViewSelector />
-      </EuiFlexItem>
       <EuiFlexItem grow>
         <EuiSuperDatePicker
           compressed

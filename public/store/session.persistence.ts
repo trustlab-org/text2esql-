@@ -1,10 +1,12 @@
 import type {
   ConversationMessage,
   CostEstimate,
+  ProviderName,
   TimeRange,
   TokenEstimate,
   ValidationResult,
 } from '../../common/types';
+import { ALL_PROVIDER_NAMES } from '../../common';
 import type { CopilotState } from './types';
 
 /**
@@ -40,6 +42,11 @@ export interface PersistedSession {
   readonly estimatedCost: CostEstimate | null;
   readonly sessionTokenUsage: CopilotState['sessionTokenUsage'];
   readonly sessionCostUsd: number;
+  /**
+   * Provider pinned via the main-screen LLM selector; null = automatic.
+   * Absent in payloads written before the selector existed — treated as null.
+   */
+  readonly preferredProvider?: ProviderName | null;
 }
 
 /** Narrow unknown to a plain object (non-null, non-array). */
@@ -88,7 +95,10 @@ function isPersistedSession(value: unknown): value is PersistedSession {
     (value.tokenUsage === null || isRecord(value.tokenUsage)) &&
     (value.estimatedCost === null || isRecord(value.estimatedCost)) &&
     isSessionTokenUsage(value.sessionTokenUsage) &&
-    typeof value.sessionCostUsd === 'number'
+    typeof value.sessionCostUsd === 'number' &&
+    (value.preferredProvider === undefined ||
+      value.preferredProvider === null ||
+      (ALL_PROVIDER_NAMES as readonly string[]).includes(value.preferredProvider as string))
   );
 }
 
@@ -142,6 +152,7 @@ export function persistSession(sessionId: string, state: CopilotState): void {
     estimatedCost: state.estimatedCost,
     sessionTokenUsage: state.sessionTokenUsage,
     sessionCostUsd: state.sessionCostUsd,
+    preferredProvider: state.preferredProvider,
   };
   try {
     window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));

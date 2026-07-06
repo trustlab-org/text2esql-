@@ -14,6 +14,7 @@ import {
 import { css } from '@emotion/react';
 
 import { useCopilot, hasUsablePrimary } from '../../store/copilot.context';
+import { ProviderSelector } from '../statusbar/ProviderSelector';
 import { SyntaxBadge } from '../statusbar/SyntaxBadge';
 import { ECSFieldsBadge } from '../statusbar/ECSFieldsBadge';
 import { TokensBadge } from '../statusbar/TokensBadge';
@@ -90,6 +91,9 @@ export const TopStatusBar: React.FC<TopStatusBarProps> = ({ onOpenBenchmark, onO
 
         <EuiFlexItem grow={false}>
           <EuiFlexGroup alignItems="center" gutterSize="s" wrap responsive={false}>
+            <EuiFlexItem grow={false}>
+              <ProviderSelector />
+            </EuiFlexItem>
             <EuiFlexItem grow={false}>
               <SyntaxBadge />
             </EuiFlexItem>

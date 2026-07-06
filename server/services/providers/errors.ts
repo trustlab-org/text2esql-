@@ -146,7 +146,7 @@ export class ProviderUnavailableError extends ProviderError {
 export class ProviderAuthError extends ProviderError {
   constructor(provider: ProviderName, options: { cause?: unknown } = {}) {
     super(
-      `Provider "${provider}" rejected authentication. Check the API key in kibana.yml.`,
+      `Provider "${provider}" rejected authentication. Check your API key in Settings.`,
       provider,
       { retryable: false, statusCode: 401, cause: options.cause }
     );

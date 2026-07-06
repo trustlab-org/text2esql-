@@ -13,6 +13,7 @@ import { useCopilot } from '../../store/copilot.context';
 import { updateKql } from '../../store/copilot.actions';
 import { KQLEditor } from './KQLEditor';
 import { EditorToolbar } from './EditorToolbar';
+import { DataViewSelector } from './DataViewSelector';
 import { ValidationFeedback } from './ValidationFeedback';
 
 /**
@@ -39,6 +40,12 @@ export const KQLEditorPanel: React.FC = () => {
           </EuiTitle>
         </EuiFlexItem>
       </EuiFlexGroup>
+
+      <EuiSpacer size="s" />
+
+      {/* Full-width row of its own: multi-select chips wrap vertically here
+          instead of colliding with the date picker inside the toolbar row. */}
+      <DataViewSelector />
 
       <EuiSpacer size="s" />
 

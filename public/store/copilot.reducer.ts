@@ -24,6 +24,7 @@ export function createInitialState(indexPattern: string): CopilotState {
     credentialsStatus: null,
     sessionTokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, requests: 0 },
     sessionCostUsd: 0,
+    preferredProvider: null,
   };
 }
 
@@ -101,14 +102,18 @@ export function copilotReducer(state: CopilotState, action: CopilotAction): Copi
     case COPILOT_ACTION_TYPES.SET_CREDENTIALS_STATUS:
       return { ...state, credentialsStatus: action.status };
 
+    case COPILOT_ACTION_TYPES.SET_PREFERRED_PROVIDER:
+      return { ...state, preferredProvider: action.provider };
+
     case COPILOT_ACTION_TYPES.RESET_SESSION:
-      // Preserve the server-loaded credential status AND the data-view selection
-      // across a session reset; both reflect durable user/server state, not
-      // per-session conversation state.
+      // Preserve the server-loaded credential status, the data-view selection
+      // and the pinned provider across a session reset; all reflect durable
+      // user/server preferences, not per-session conversation state.
       return {
         ...createInitialState(DEFAULT_INDEX_PATTERN),
         selectedDataViews: state.selectedDataViews,
         credentialsStatus: state.credentialsStatus,
+        preferredProvider: state.preferredProvider,
       };
 
     default:

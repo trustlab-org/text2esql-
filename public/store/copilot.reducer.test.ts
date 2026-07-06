@@ -72,6 +72,7 @@ describe('copilotReducer', () => {
       credentialsStatus: null,
       sessionTokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, requests: 0 },
       sessionCostUsd: 0,
+      preferredProvider: null,
     });
   });
 
