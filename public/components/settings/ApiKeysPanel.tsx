@@ -3,6 +3,8 @@ import {
   EuiButton,
   EuiButtonEmpty,
   EuiCallOut,
+  EuiFlexGroup,
+  EuiFlexItem,
   EuiForm,
   EuiSpacer,
   EuiText,
@@ -108,19 +110,28 @@ export const ApiKeysPanel: React.FC<ApiKeysPanelProps> = ({ onClose, onChange })
   const [primaryProvider, setPrimaryProvider] = useState<ProviderName | null>(
     PROVIDER_NAMES.ANTHROPIC
   );
+  // The designated fallback (tried right after the primary). Encoded purely by
+  // save order — [primary, fallback, ...backups] — so it needs no server field.
+  const [fallbackProvider, setFallbackProvider] = useState<ProviderName | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState<boolean>(false);
 
   // Prefill from masked status once it loads (provider/model/endpoint only). An
-  // empty stored set leaves the default blank slot in place.
+  // empty stored set leaves the default blank slot in place. The saved order is
+  // [primary, fallback, ...backups], so the first non-primary slot is the
+  // de-facto fallback and is re-labelled as such.
   useEffect(() => {
     if (status && !hydrated && status.providers.length > 0) {
       const seeded: Slot[] = status.providers.map((p) => ({
         id: nextSlotId(),
         section: sectionFromMasked(p),
       }));
+      const primary = status.primaryProvider ?? seeded[0]?.section.provider ?? null;
       setSlots(seeded);
-      setPrimaryProvider(status.primaryProvider ?? seeded[0]?.section.provider ?? null);
+      setPrimaryProvider(primary);
+      setFallbackProvider(
+        status.providers.find((p) => p.provider !== primary)?.provider ?? null
+      );
       setHydrated(true);
     }
   }, [status, hydrated]);
@@ -140,13 +151,27 @@ export const ApiKeysPanel: React.FC<ApiKeysPanelProps> = ({ onClose, onChange })
     setSlots((prev) => {
       const previous = prev.find((slot) => slot.id === id);
       const next = prev.map((slot) => (slot.id === id ? { ...slot, section } : slot));
-      // If a slot changed provider and it was the primary, keep the pointer on
-      // the same slot by following it to the new provider.
+      // If a slot changed provider, follow any primary/fallback pointer that was
+      // aimed at it onto the new provider so the role sticks to the same card.
       if (previous && previous.section.provider === primaryProvider) {
         setPrimaryProvider(section.provider);
       }
+      if (previous && previous.section.provider === fallbackProvider) {
+        setFallbackProvider(section.provider);
+      }
       return next;
     });
+  };
+
+  /** Marks a provider as the primary; it can no longer also be the fallback. */
+  const makePrimary = (provider: ProviderName): void => {
+    setPrimaryProvider(provider);
+    setFallbackProvider((prev) => (prev === provider ? null : prev));
+  };
+
+  /** Marks a provider as the fallback (tried right after the primary). */
+  const makeFallback = (provider: ProviderName): void => {
+    setFallbackProvider(provider);
   };
 
   const addSlot = (): void => {
@@ -158,12 +183,28 @@ export const ApiKeysPanel: React.FC<ApiKeysPanelProps> = ({ onClose, onChange })
     setPrimaryProvider((prev) => prev ?? provider);
   };
 
+  /** Adds a new provider slot and designates it the fallback. */
+  const addFallbackSlot = (): void => {
+    const provider = firstUnusedProvider(usedProviders);
+    if (provider === null) {
+      return;
+    }
+    setSlots((prev) => [...prev, { id: nextSlotId(), section: emptySection(provider) }]);
+    setPrimaryProvider((prev) => prev ?? provider);
+    // A new fallback provider is, by construction, not the primary (the primary
+    // is already in a used slot and firstUnusedProvider excludes it).
+    setFallbackProvider(provider);
+  };
+
   const removeSlot = (id: string): void => {
     setSlots((prev) => {
       const next = prev.filter((slot) => slot.id !== id);
       const removed = prev.find((slot) => slot.id === id);
       if (removed && removed.section.provider === primaryProvider) {
         setPrimaryProvider(next[0]?.section.provider ?? null);
+      }
+      if (removed && removed.section.provider === fallbackProvider) {
+        setFallbackProvider(null);
       }
       return next;
     });
@@ -188,13 +229,29 @@ export const ApiKeysPanel: React.FC<ApiKeysPanelProps> = ({ onClose, onChange })
     }
     setError(null);
 
-    const providers: SaveCredentialInput[] = slots.map((slot) => inputFromSection(slot.section));
-    // Pin the chosen primary when it is still in the list; otherwise the server
-    // defaults to providers[0].
+    // Pin the chosen primary when it is still in the list; otherwise fall back
+    // to the first slot (the server also defaults to providers[0]).
     const chosenPrimary =
       primaryProvider !== null && usedProviders.includes(primaryProvider)
         ? primaryProvider
-        : providers[0]?.provider;
+        : slots[0]?.section.provider;
+
+    // Order the slots as [primary, fallback, ...backups]. The server hoists the
+    // primary and preserves the rest of the order, so this ordering IS the
+    // provider chain: primary → fallback → remaining backups.
+    const ordered: Slot[] = [];
+    const pushOnce = (slot: Slot | undefined): void => {
+      if (slot && !ordered.includes(slot)) {
+        ordered.push(slot);
+      }
+    };
+    pushOnce(slots.find((s) => s.section.provider === chosenPrimary));
+    if (fallbackProvider !== null && fallbackProvider !== chosenPrimary) {
+      pushOnce(slots.find((s) => s.section.provider === fallbackProvider));
+    }
+    slots.forEach((s) => pushOnce(s));
+
+    const providers: SaveCredentialInput[] = ordered.map((slot) => inputFromSection(slot.section));
 
     const input: SaveCredentialsInput = {
       providers,
@@ -215,6 +272,7 @@ export const ApiKeysPanel: React.FC<ApiKeysPanelProps> = ({ onClose, onChange })
       await clear();
       setSlots([{ id: nextSlotId(), section: emptySection(PROVIDER_NAMES.ANTHROPIC) }]);
       setPrimaryProvider(PROVIDER_NAMES.ANTHROPIC);
+      setFallbackProvider(null);
     } catch {
       // Surfaced via hookError.
     }
@@ -265,7 +323,9 @@ export const ApiKeysPanel: React.FC<ApiKeysPanelProps> = ({ onClose, onChange })
                 keyPrefix={slot.section.provider}
                 unavailableProviders={otherProviders}
                 isPrimary={slot.section.provider === primaryProvider}
-                onMakePrimary={() => setPrimaryProvider(slot.section.provider)}
+                onMakePrimary={() => makePrimary(slot.section.provider)}
+                isFallback={slot.section.provider === fallbackProvider}
+                onMakeFallback={() => makeFallback(slot.section.provider)}
                 onRemove={() => removeSlot(slot.id)}
               />
               <EuiSpacer size="m" />
@@ -273,14 +333,28 @@ export const ApiKeysPanel: React.FC<ApiKeysPanelProps> = ({ onClose, onChange })
           );
         })}
 
-        <EuiButton
-          iconType="plusInCircle"
-          onClick={addSlot}
-          isDisabled={!canAddProvider}
-          data-test-subj="queryCopilotAddProviderButton"
-        >
-          Add provider
-        </EuiButton>
+        <EuiFlexGroup gutterSize="s" responsive={false} alignItems="center">
+          <EuiFlexItem grow={false}>
+            <EuiButton
+              iconType="plusInCircle"
+              onClick={addSlot}
+              isDisabled={!canAddProvider}
+              data-test-subj="queryCopilotAddProviderButton"
+            >
+              Add provider
+            </EuiButton>
+          </EuiFlexItem>
+          <EuiFlexItem grow={false}>
+            <EuiButtonEmpty
+              iconType="plusInCircle"
+              onClick={addFallbackSlot}
+              isDisabled={!canAddProvider}
+              data-test-subj="queryCopilotAddFallbackButton"
+            >
+              Add as fallback
+            </EuiButtonEmpty>
+          </EuiFlexItem>
+        </EuiFlexGroup>
 
         <EuiSpacer size="l" />
 

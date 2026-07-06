@@ -57,6 +57,10 @@ export interface ProviderCardProps {
   readonly isPrimary: boolean;
   /** Marks this slot as the default primary provider. */
   readonly onMakePrimary: () => void;
+  /** Whether this slot is the designated fallback (tried right after primary). */
+  readonly isFallback: boolean;
+  /** Marks this slot as the fallback provider. */
+  readonly onMakeFallback: () => void;
   /** Removes this slot from the list. */
   readonly onRemove: () => void;
 }
@@ -85,6 +89,8 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
   unavailableProviders = [],
   isPrimary,
   onMakePrimary,
+  isFallback,
+  onMakeFallback,
   onRemove,
 }) => {
   const { models, status, error, discover, reset } = useProviderModels();
@@ -253,6 +259,25 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
               </EuiButtonEmpty>
             )}
           </EuiFlexItem>
+          {/* The fallback role is only meaningful for a non-primary slot; the
+              primary is already tried first, so it can't also be the fallback. */}
+          {!isPrimary && (
+            <EuiFlexItem grow={false}>
+              {isFallback ? (
+                <EuiBadge color="accent" data-test-subj={`queryCopilot${keyPrefix}FallbackBadge`}>
+                  Fallback
+                </EuiBadge>
+              ) : (
+                <EuiButtonEmpty
+                  size="s"
+                  onClick={onMakeFallback}
+                  data-test-subj={`queryCopilot${keyPrefix}SetFallback`}
+                >
+                  Set as fallback
+                </EuiButtonEmpty>
+              )}
+            </EuiFlexItem>
+          )}
           <EuiFlexItem grow={false}>
             <EuiButtonIcon
               iconType="trash"
