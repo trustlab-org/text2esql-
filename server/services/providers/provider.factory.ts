@@ -121,20 +121,17 @@ export class ProviderFactory {
   }
 
   /**
-   * Builds the per-request provider map: primary then fallback (skipping the
-   * fallback when it is absent/null). When the fallback names the same provider
-   * as the primary the map keeps a single entry — the fallback wins (last
-   * write), since it was supplied explicitly alongside the primary.
+   * Builds the per-request provider map from the ordered credential list: one
+   * concrete {@link ILLMProvider} per entry, keyed by provider name. Map.set
+   * dedupes by key, so a duplicate provider in the list keeps a single entry
+   * (last write wins). The map is unordered; routing order is derived separately
+   * from the list in {@link buildRequestRouter}.
    */
   public createProviderMap(creds: RequestCredentials): Map<ProviderName, ILLMProvider> {
     const map = new Map<ProviderName, ILLMProvider>();
 
-    map.set(creds.primary.provider, this.createProvider(creds.primary));
-
-    if (creds.fallback) {
-      // Map.set dedupes by key: a same-provider fallback overwrites the primary
-      // entry, leaving exactly one provider instance.
-      map.set(creds.fallback.provider, this.createProvider(creds.fallback));
+    for (const cred of creds.providers) {
+      map.set(cred.provider, this.createProvider(cred));
     }
 
     return map;

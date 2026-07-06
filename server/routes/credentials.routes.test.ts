@@ -31,8 +31,8 @@ function captureHandlers(): { router: IRouter; handlers: Handlers } {
 }
 
 const MASKED = {
-  primary: { provider: 'openai', model: 'gpt-4o', endpoint: null, hasKey: true },
-  fallback: null,
+  providers: [{ provider: 'openai', model: 'gpt-4o', endpoint: null, hasKey: true }],
+  primaryProvider: 'openai',
 };
 
 function makeService(overrides: Partial<Record<string, jest.Mock>> = {}) {
@@ -107,7 +107,7 @@ describe('registerCredentialsRoutes', () => {
       const { router, handlers } = captureHandlers();
       registerCredentialsRoutes(router, makeContext(service));
 
-      const body = { primary: { provider: 'openai', apiKey: 'sk-123' }, fallback: null };
+      const body = { providers: [{ provider: 'openai', apiKey: 'sk-123' }] };
       const response = makeResponse();
       await handlers.post(makeCtx(), makeRequest(body), response as any);
 
@@ -122,7 +122,7 @@ describe('registerCredentialsRoutes', () => {
       const { router, handlers } = captureHandlers();
       registerCredentialsRoutes(router, makeContext(service));
 
-      const body = { primary: { provider: 'openai' }, fallback: null };
+      const body = { providers: [{ provider: 'openai' }] };
       const response = makeResponse();
       await handlers.post(makeCtx(), makeRequest(body), response as any);
 
@@ -136,7 +136,7 @@ describe('registerCredentialsRoutes', () => {
       const { router, handlers } = captureHandlers();
       registerCredentialsRoutes(router, makeContext(service));
 
-      const body = { primary: { provider: 'ollama' }, fallback: null };
+      const body = { providers: [{ provider: 'ollama' }] };
       const response = makeResponse();
       await handlers.post(makeCtx(), makeRequest(body), response as any);
 
@@ -145,11 +145,11 @@ describe('registerCredentialsRoutes', () => {
     });
 
     it('allows a metadata edit when a key is already on file', async () => {
-      const service = makeService(); // getMaskedForUser → MASKED (hasKey: true)
+      const service = makeService(); // getMaskedForUser → MASKED (openai hasKey: true)
       const { router, handlers } = captureHandlers();
       registerCredentialsRoutes(router, makeContext(service));
 
-      const body = { primary: { provider: 'openai', model: 'gpt-4o-mini' }, fallback: null };
+      const body = { providers: [{ provider: 'openai', model: 'gpt-4o-mini' }] };
       const response = makeResponse();
       await handlers.post(makeCtx(), makeRequest(body), response as any);
 

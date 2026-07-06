@@ -40,9 +40,9 @@ function captureHandler(): { router: IRouter; getHandler: () => any } {
   return { router, getHandler: () => handler };
 }
 
-// By default the mocked credentials service returns a usable primary credential
-// so the handler proceeds to the pipeline. Individual tests can override it.
-const DEFAULT_CREDS = { primary: { provider: 'openai', apiKey: 'sk-test' }, fallback: null };
+// By default the mocked credentials service returns a usable provider list so
+// the handler proceeds to the pipeline. Individual tests can override it.
+const DEFAULT_CREDS = { providers: [{ provider: 'openai', apiKey: 'sk-test' }] };
 
 function makeContext(
   execute: jest.Mock,

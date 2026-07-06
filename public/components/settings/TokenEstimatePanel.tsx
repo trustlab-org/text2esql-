@@ -23,16 +23,16 @@ const EXAMPLE_QUERY = 'show me all failed login attempts';
 
 /** Row shape rendered by the estimate table (an entry tagged with its role). */
 interface EstimateRow extends TokenEstimateEntry {
-  readonly role: 'Primary' | 'Fallback';
+  readonly role: 'Primary' | 'Additional';
 }
 
 type EstimateStatus = 'idle' | 'loading' | 'done' | 'error';
 
 /**
  * Per-provider token/cost comparison shown below the keys form in the settings
- * flyout. Reads the configured primary (+ optional fallback) from
- * {@link useCredentials} and the most recent analyst query from copilot state,
- * then calls the pure token-estimate endpoint.
+ * flyout. Reads every configured provider from {@link useCredentials} (the
+ * default primary first, then the rest) and the most recent analyst query from
+ * copilot state, then calls the pure token-estimate endpoint.
  */
 export const TokenEstimatePanel: React.FC = () => {
   const { queryApi } = useServices();
@@ -49,34 +49,31 @@ export const TokenEstimatePanel: React.FC = () => {
     return content && content.length > 0 ? content : EXAMPLE_QUERY;
   }, [state.conversation]);
 
-  // The provider specs (with role) to estimate: primary first, then fallback.
-  // Sourced from the masked credential status (provider/model metadata only).
-  const specs = useMemo<Array<{ role: 'Primary' | 'Fallback'; spec: TokenEstimateProviderSpec }>>(
+  // The provider specs (with role) to estimate: the default primary first, then
+  // every other configured provider. Sourced from the masked credential status
+  // (provider/model metadata only).
+  const specs = useMemo<Array<{ role: 'Primary' | 'Additional'; spec: TokenEstimateProviderSpec }>>(
     () => {
       if (!credentialsStatus) {
         return [];
       }
-      const out: Array<{ role: 'Primary' | 'Fallback'; spec: TokenEstimateProviderSpec }> = [
-        {
-          role: 'Primary',
-          spec: {
-            provider: credentialsStatus.primary.provider,
-            ...(credentialsStatus.primary.model ? { model: credentialsStatus.primary.model } : {}),
-          },
+      const { providers, primaryProvider } = credentialsStatus;
+      const ordered = [...providers].sort((a, b) => {
+        if (a.provider === primaryProvider) {
+          return -1;
+        }
+        if (b.provider === primaryProvider) {
+          return 1;
+        }
+        return 0;
+      });
+      return ordered.map((p) => ({
+        role: p.provider === primaryProvider ? ('Primary' as const) : ('Additional' as const),
+        spec: {
+          provider: p.provider,
+          ...(p.model ? { model: p.model } : {}),
         },
-      ];
-      if (credentialsStatus.fallback) {
-        out.push({
-          role: 'Fallback',
-          spec: {
-            provider: credentialsStatus.fallback.provider,
-            ...(credentialsStatus.fallback.model
-              ? { model: credentialsStatus.fallback.model }
-              : {}),
-          },
-        });
-      }
-      return out;
+      }));
     },
     [credentialsStatus]
   );

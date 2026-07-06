@@ -87,7 +87,7 @@ export function registerModelsRoutes(router: IRouter, context: QueryCopilotConte
         // ── 1. Resolve the credential ────────────────────────────────────────
         // Prefer the raw key/endpoint from the body; otherwise fall back to the
         // user's stored (decrypted server-side) credential slot for this
-        // provider — primary first, then fallback. Never logged.
+        // provider, searched by name across the provider list. Never logged.
         let apiKey = body.apiKey;
         let endpoint = body.endpoint;
 
@@ -101,12 +101,7 @@ export function registerModelsRoutes(router: IRouter, context: QueryCopilotConte
             ? await credentialsService.getDecryptedCredentialsForUser(username!)
             : null;
 
-          let slot: { apiKey?: string; endpoint?: string } | undefined;
-          if (stored && stored.primary.provider === provider) {
-            slot = stored.primary;
-          } else if (stored && stored.fallback && stored.fallback.provider === provider) {
-            slot = stored.fallback;
-          }
+          const slot = stored?.providers.find((p) => p.provider === provider);
 
           apiKey = apiKey ?? slot?.apiKey;
           endpoint = endpoint ?? slot?.endpoint;

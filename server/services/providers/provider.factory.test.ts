@@ -148,33 +148,36 @@ describe('ProviderFactory.createProviderMap', () => {
 
   beforeEach(() => jest.clearAllMocks());
 
-  it('builds primary then fallback as two distinct entries', () => {
+  it('builds every provider in the list as a distinct entry', () => {
     const map = factory.createProviderMap({
-      primary: { provider: PROVIDER_NAMES.OPENAI, apiKey: 'k1' },
-      fallback: { provider: PROVIDER_NAMES.GEMINI, apiKey: 'k2' },
+      providers: [
+        { provider: PROVIDER_NAMES.OPENAI, apiKey: 'k1' },
+        { provider: PROVIDER_NAMES.GEMINI, apiKey: 'k2' },
+      ],
     });
     expect(map.size).toBe(2);
     expect(map.has(PROVIDER_NAMES.OPENAI as ProviderName)).toBe(true);
     expect(map.has(PROVIDER_NAMES.GEMINI as ProviderName)).toBe(true);
   });
 
-  it('skips a null/absent fallback', () => {
+  it('handles a single-provider list', () => {
     const map = factory.createProviderMap({
-      primary: { provider: PROVIDER_NAMES.OPENAI, apiKey: 'k1' },
-      fallback: null,
+      providers: [{ provider: PROVIDER_NAMES.OPENAI, apiKey: 'k1' }],
     });
     expect(map.size).toBe(1);
     expect(map.has(PROVIDER_NAMES.OPENAI as ProviderName)).toBe(true);
   });
 
-  it('dedupes when primary and fallback name the same provider (fallback wins)', () => {
+  it('dedupes a repeated provider in the list (last write wins)', () => {
     const map = factory.createProviderMap({
-      primary: { provider: PROVIDER_NAMES.OPENAI, apiKey: 'k1', model: 'gpt-4o' },
-      fallback: { provider: PROVIDER_NAMES.OPENAI, apiKey: 'k2', model: 'gpt-4o-mini' },
+      providers: [
+        { provider: PROVIDER_NAMES.OPENAI, apiKey: 'k1', model: 'gpt-4o' },
+        { provider: PROVIDER_NAMES.OPENAI, apiKey: 'k2', model: 'gpt-4o-mini' },
+      ],
     });
     expect(map.size).toBe(1);
-    // Last write wins: the fallback's model is the one that constructed the
-    // surviving provider instance.
+    // Last write wins: the second entry's model constructed the surviving
+    // provider instance.
     expect(OpenAIMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ apiKey: 'k2', model: 'gpt-4o-mini' })
     );

@@ -55,17 +55,17 @@ function toCopilotError(error: unknown): CopilotError {
 }
 
 /**
- * True when the masked status has a usable primary slot: either the primary has
- * a stored key, or its provider is Ollama (which runs locally and needs none).
+ * True when the masked status has at least one usable provider slot: any
+ * configured provider that has a stored key, or whose provider is Ollama (which
+ * runs locally and needs none). Gates generation and the no-key banner.
  */
 export function hasUsablePrimary(status: MaskedCredentials | null): boolean {
   if (status === null) {
     return false;
   }
-  if (status.primary.provider === PROVIDER_NAMES.OLLAMA) {
-    return true;
-  }
-  return status.primary.hasKey;
+  return status.providers.some(
+    (p) => p.provider === PROVIDER_NAMES.OLLAMA || p.hasKey
+  );
 }
 
 /** Value exposed by {@link CopilotContext}. */

@@ -9,8 +9,8 @@ import { ServicesContext, type Services } from '../services';
 import type { MaskedCredentials, SaveCredentialsInput } from '../../common/types';
 
 const MASKED: MaskedCredentials = {
-  primary: { provider: 'groq', model: null, endpoint: null, hasKey: true },
-  fallback: null,
+  providers: [{ provider: 'groq', model: null, endpoint: null, hasKey: true }],
+  primaryProvider: 'groq',
 };
 
 function makeServices(overrides: Partial<Services['credentialsApi']> = {}): {
@@ -63,8 +63,8 @@ describe('useCredentials', () => {
     const onChange = jest.fn();
     const { services, saveCredentials } = makeServices();
     const input: SaveCredentialsInput = {
-      primary: { provider: 'openai', apiKey: 'sk-x' },
-      fallback: null,
+      providers: [{ provider: 'openai', apiKey: 'sk-x' }],
+      primaryProvider: 'openai',
     };
 
     const { result } = renderHook(() => useCredentials(onChange), { wrapper: wrapper(services) });

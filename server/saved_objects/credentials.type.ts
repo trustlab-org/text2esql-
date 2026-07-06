@@ -21,6 +21,22 @@ export const CREDENTIALS_SO_TYPE = 'query-copilot-credentials';
  * metadata. Optional fields are absent when the user has not supplied them.
  */
 export interface CredentialsSOAttributes {
+  /**
+   * NEW source of truth (multi-provider). Encrypted-at-rest JSON object mapping
+   * each configured provider to its raw apiKey: `{ [provider]: apiKey }`. Absent
+   * on legacy docs written before the multi-provider migration (those are read
+   * back from the `primary*`/`fallback*` fields below). Never logged.
+   */
+  providerKeysJson?: string;
+  /**
+   * NEW source of truth (multi-provider). Plaintext JSON object of per-provider
+   * metadata in the user's saved order:
+   * `{ [provider]: { model?, endpoint?, hasKey } }`. `hasKey` mirrors whether an
+   * encrypted key exists for that provider (a non-decrypting read strips
+   * {@link providerKeysJson}, so masked reads rely on this flag). Absent on
+   * legacy docs.
+   */
+  providerMetaJson?: string;
   primaryProvider: ProviderName;
   primaryModel?: string;
   primaryEndpoint?: string;
@@ -55,6 +71,11 @@ export const credentialsType: SavedObjectsType = {
   mappings: {
     dynamic: false,
     properties: {
+      // Multi-provider (new). The encrypted key blob is `binary` (ciphertext,
+      // never queried); the plaintext metadata JSON is stored as an unindexed
+      // keyword (never searched — read whole and JSON.parsed).
+      providerKeysJson: { type: 'binary' },
+      providerMetaJson: { type: 'keyword', index: false },
       primaryProvider: { type: 'keyword' },
       primaryModel: { type: 'keyword' },
       primaryEndpoint: { type: 'keyword' },

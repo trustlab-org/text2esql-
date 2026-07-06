@@ -23,27 +23,24 @@ const providerLiteral = schema.oneOf([
 ]);
 
 /**
- * POST body. The apiKey is optional (Ollama needs none; on update an omitted
- * key preserves the stored one) and bounded; it is NEVER logged.
+ * One provider slot. The apiKey is optional (Ollama needs none; on update an
+ * omitted key preserves the stored one) and bounded; it is NEVER logged.
+ */
+const providerObjectSchema = schema.object({
+  provider: providerLiteral,
+  model: schema.maybe(schema.string({ maxLength: 256 })),
+  endpoint: schema.maybe(schema.string({ maxLength: 512 })),
+  apiKey: schema.maybe(schema.string({ maxLength: 512 })),
+});
+
+/**
+ * POST body. An ordered list of 1..5 provider slots (at most one per provider)
+ * plus an optional `primaryProvider` naming the default (tried first). Raw keys
+ * are NEVER logged.
  */
 const saveCredentialsBodySchema = schema.object({
-  primary: schema.object({
-    provider: providerLiteral,
-    model: schema.maybe(schema.string({ maxLength: 256 })),
-    endpoint: schema.maybe(schema.string({ maxLength: 512 })),
-    apiKey: schema.maybe(schema.string({ maxLength: 512 })),
-  }),
-  fallback: schema.maybe(
-    schema.nullable(
-      schema.object({
-        enabled: schema.boolean(),
-        provider: schema.maybe(providerLiteral),
-        model: schema.maybe(schema.string({ maxLength: 256 })),
-        endpoint: schema.maybe(schema.string({ maxLength: 512 })),
-        apiKey: schema.maybe(schema.string({ maxLength: 512 })),
-      })
-    )
-  ),
+  providers: schema.arrayOf(providerObjectSchema, { minSize: 1, maxSize: 5 }),
+  primaryProvider: schema.maybe(providerLiteral),
 });
 
 type SaveCredentialsBody = TypeOf<typeof saveCredentialsBodySchema>;
@@ -136,27 +133,31 @@ export function registerCredentialsRoutes(router: IRouter, context: QueryCopilot
 
         const body: SaveCredentialsBody = request.body;
 
-        // The primary apiKey is required the FIRST time it is set (no stored key
+        // A key is required the FIRST time a slot is configured (no stored key
         // and none supplied) for every provider except Ollama, which needs none.
-        // The check reads only the masked `hasKey` flag — never a key value.
-        if (body.primary.provider !== PROVIDER_NAMES.OLLAMA && !body.primary.apiKey) {
+        // The check reads only the masked `hasKey` flag — never a key value, and
+        // fetches the existing masked status at most once.
+        const slotsNeedingKey = body.providers.filter(
+          (slot) => slot.provider !== PROVIDER_NAMES.OLLAMA && !slot.apiKey
+        );
+        if (slotsNeedingKey.length > 0) {
           const existing = await service.getMaskedForUser(username);
-          if (!existing?.primary.hasKey) {
+          const hasKeyByProvider = new Map(
+            (existing?.providers ?? []).map((p) => [p.provider, p.hasKey])
+          );
+          const missing = slotsNeedingKey.find((slot) => !hasKeyByProvider.get(slot.provider));
+          if (missing) {
             return response.customError({
               statusCode: 400,
               headers,
               body: {
-                message:
-                  'An API key is required for the selected primary provider. Add your key to continue.',
+                message: `An API key is required for the ${missing.provider} provider. Add your key to continue.`,
                 attributes: { requestId },
               },
             });
           }
         }
 
-        // Cast to the service input shape (fallback provider is required by the
-        // service when enabled; an enabled fallback without a provider simply
-        // produces no fallback bundle downstream).
         await service.saveForUser(username, body as SaveCredentialsInput);
 
         const masked = await service.getMaskedForUser(username);

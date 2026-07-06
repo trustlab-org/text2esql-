@@ -97,7 +97,14 @@ export class QueryCopilotPlugin
     // two *ApiKey attributes are the encrypted ones and must NOT appear here.
     deps.encryptedSavedObjects.registerType({
       type: CREDENTIALS_SO_TYPE,
-      attributesToEncrypt: new Set(['primaryApiKey', 'fallbackApiKey']),
+      // `providerKeysJson` is the multi-provider key blob (new source of truth).
+      // The legacy `primaryApiKey`/`fallbackApiKey` MUST stay registered so docs
+      // written before the migration still decrypt. `attributesToEncrypt` may be
+      // extended safely; `attributesToIncludeInAAD` must NOT change (it would
+      // break decryption of existing docs), so the new blob is bound to the same
+      // AAD as the legacy keys — which is why saveForUser keeps the plaintext
+      // primary* AAD fields in sync with the chosen primary provider.
+      attributesToEncrypt: new Set(['providerKeysJson', 'primaryApiKey', 'fallbackApiKey']),
       attributesToIncludeInAAD: new Set([
         'primaryProvider',
         'primaryModel',

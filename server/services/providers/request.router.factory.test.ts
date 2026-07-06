@@ -11,7 +11,7 @@ import type { LoggerService } from '../observability';
 //
 // ProviderFactory.createProviderMap and the ProviderRouter / strategy classes
 // are mocked: we assert the factory map is forwarded, the order is the deduped
-// primary→fallback sequence, and the router is built with a NullHealthMonitor
+// provider-list sequence, and the router is built with a NullHealthMonitor
 // + FixedOrderRoutingStrategy + the supplied logger.
 // ---------------------------------------------------------------------------
 
@@ -42,8 +42,10 @@ describe('buildRequestRouter', () => {
 
   it('builds the map from the factory and forwards it to the router', () => {
     const creds: RequestCredentials = {
-      primary: { provider: OPENAI, apiKey: 'k1' },
-      fallback: { provider: GEMINI, apiKey: 'k2' },
+      providers: [
+        { provider: OPENAI, apiKey: 'k1' },
+        { provider: GEMINI, apiKey: 'k2' },
+      ],
     };
     const logger = makeLogger();
 
@@ -57,27 +59,29 @@ describe('buildRequestRouter', () => {
     expect(loggerArg).toBe(logger);
   });
 
-  it('orders providers primary then fallback', () => {
+  it('orders providers in list order', () => {
     buildRequestRouter(
-      { primary: { provider: OPENAI, apiKey: 'k1' }, fallback: { provider: GEMINI, apiKey: 'k2' } },
+      { providers: [{ provider: OPENAI, apiKey: 'k1' }, { provider: GEMINI, apiKey: 'k2' }] },
       makeLogger()
     );
     expect(FixedStrategyMock).toHaveBeenCalledWith([OPENAI, GEMINI]);
   });
 
-  it('omits a null fallback from the order', () => {
+  it('handles a single-provider list', () => {
     buildRequestRouter(
-      { primary: { provider: OPENAI, apiKey: 'k1' }, fallback: null },
+      { providers: [{ provider: OPENAI, apiKey: 'k1' }] },
       makeLogger()
     );
     expect(FixedStrategyMock).toHaveBeenCalledWith([OPENAI]);
   });
 
-  it('dedupes a same-provider fallback in the order', () => {
+  it('dedupes a repeated provider in the order', () => {
     buildRequestRouter(
       {
-        primary: { provider: OPENAI, apiKey: 'k1' },
-        fallback: { provider: OPENAI, apiKey: 'k2' },
+        providers: [
+          { provider: OPENAI, apiKey: 'k1' },
+          { provider: OPENAI, apiKey: 'k2' },
+        ],
       },
       makeLogger()
     );
@@ -86,7 +90,7 @@ describe('buildRequestRouter', () => {
 
   it('returns the constructed ProviderRouter instance', () => {
     const router = buildRequestRouter(
-      { primary: { provider: OPENAI, apiKey: 'k1' } },
+      { providers: [{ provider: OPENAI, apiKey: 'k1' }] },
       makeLogger()
     );
     expect(router).toBeInstanceOf(RouterMock);

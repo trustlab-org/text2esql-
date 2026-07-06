@@ -10,8 +10,8 @@ import { ServicesContext, type Services } from '../../services';
 import type { MaskedCredentials } from '../../../common/types';
 
 const WITH_KEY: MaskedCredentials = {
-  primary: { provider: 'anthropic', model: null, endpoint: null, hasKey: true },
-  fallback: null,
+  providers: [{ provider: 'anthropic', model: null, endpoint: null, hasKey: true }],
+  primaryProvider: 'anthropic',
 };
 
 /** Loads credential status into context (simulating the on-mount refresh). */

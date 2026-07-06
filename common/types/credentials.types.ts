@@ -3,7 +3,7 @@ import type { ProviderName } from './provider.types';
 // ---------------------------------------------------------------------------
 // ProviderCredential
 //
-// A single provider's per-request credential. Carried on the request body so a
+// A single provider's per-request credential. Carried on the request chain so a
 // provider can be built PER REQUEST from the caller's own key rather than the
 // boot-time kibana.yml config. The apiKey is NEVER written to kibana.yml and
 // NEVER logged.
@@ -27,28 +27,29 @@ export interface ProviderCredential {
 // ---------------------------------------------------------------------------
 // RequestCredentials
 //
-// The credential bundle a single request carries: a mandatory primary provider
-// and an optional fallback. The router tries primary first, then fallback.
+// The credential bundle a single request carries: an ORDERED list of provider
+// credentials. The router tries them in order (index 0 first) and falls through
+// on failure. The list holds at most one entry per provider. The caller's
+// selected provider (if any) is hoisted to the front before routing.
 // ---------------------------------------------------------------------------
 
 export interface RequestCredentials {
-  /** Tried first for every request. */
-  readonly primary: ProviderCredential;
-  /** Tried when the primary fails. Absent/null when no fallback is supplied. */
-  readonly fallback?: ProviderCredential | null;
+  /**
+   * Ordered provider credentials to try (index 0 first). Always non-empty for a
+   * usable bundle. At most one entry per provider.
+   */
+  readonly providers: readonly ProviderCredential[];
 }
 
 // ---------------------------------------------------------------------------
 // Masked credential metadata
 //
-// Stage 3 moved raw keys to encrypted server-side storage. The browser now only
-// ever handles MASKED metadata: provider/model/endpoint plus a `hasKey` boolean.
-// Raw keys are never returned to the client. These structurally mirror the
-// server's own copies in credentials.service.ts; they are the frontend-facing
-// contract exported from common.
+// The browser only ever handles MASKED metadata: provider/model/endpoint plus a
+// `hasKey` boolean. Raw keys are never returned to the client. These are the
+// frontend-facing contract exported from common.
 // ---------------------------------------------------------------------------
 
-/** Masked metadata for a single provider slot. Never carries a raw key. */
+/** Masked metadata for a single configured provider slot. Never carries a raw key. */
 export interface MaskedProvider {
   readonly provider: ProviderName;
   readonly model: string | null;
@@ -56,10 +57,18 @@ export interface MaskedProvider {
   readonly hasKey: boolean;
 }
 
-/** Masked status for the user's stored credentials (GET /credentials). */
+/**
+ * Masked status for the user's stored credentials (GET /credentials).
+ *
+ * Lists every configured provider slot (0..5, one per provider) and names which
+ * provider is the default primary (tried first when the user has not pinned a
+ * different one via the main-screen selector).
+ */
 export interface MaskedCredentials {
-  readonly primary: MaskedProvider;
-  readonly fallback: (MaskedProvider & { readonly enabled: boolean }) | null;
+  /** Every configured provider slot, in the user's saved order. */
+  readonly providers: readonly MaskedProvider[];
+  /** The default primary provider, or null when nothing is configured. */
+  readonly primaryProvider: ProviderName | null;
 }
 
 /** Per-provider input for one slot of a save request. */
@@ -73,8 +82,11 @@ export interface SaveCredentialInput {
 
 /** Body for POST /credentials. */
 export interface SaveCredentialsInput {
-  readonly primary: SaveCredentialInput;
-  readonly fallback?:
-    | (SaveCredentialInput & { readonly enabled: boolean })
-    | null;
+  /** The full set of provider slots to persist (at most one per provider). */
+  readonly providers: readonly SaveCredentialInput[];
+  /**
+   * Which provider is the default primary (tried first). Defaults to
+   * `providers[0]` when omitted or when the named provider is not in the list.
+   */
+  readonly primaryProvider?: ProviderName;
 }

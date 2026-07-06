@@ -44,8 +44,16 @@ export function useTokenEstimate(text: string): UseTokenEstimateResult {
   /** Monotonic sequence used to drop stale (out-of-order) resolutions. */
   const seqRef = useRef(0);
 
-  const provider = credentialsStatus?.primary.provider ?? null;
-  const model = credentialsStatus?.primary.model ?? null;
+  // The primary provider spec comes from `primaryProvider` (looked up in
+  // `providers`), falling back to the first configured provider.
+  const primarySpec =
+    credentialsStatus?.providers.find(
+      (p) => p.provider === credentialsStatus.primaryProvider
+    ) ??
+    credentialsStatus?.providers[0] ??
+    null;
+  const provider = primarySpec?.provider ?? null;
+  const model = primarySpec?.model ?? null;
 
   useEffect(() => {
     const trimmed = text.trim();

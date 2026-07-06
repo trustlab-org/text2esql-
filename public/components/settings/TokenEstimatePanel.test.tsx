@@ -36,10 +36,12 @@ const ESTIMATES: TokenEstimateResponse = {
   ],
 };
 
-function maskedFor(provider: MaskedCredentials['primary']['provider']): MaskedCredentials {
+function maskedFor(
+  provider: MaskedCredentials['providers'][number]['provider']
+): MaskedCredentials {
   return {
-    primary: { provider, model: null, endpoint: null, hasKey: true },
-    fallback: null,
+    providers: [{ provider, model: null, endpoint: null, hasKey: true }],
+    primaryProvider: provider,
   };
 }
 

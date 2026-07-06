@@ -48,26 +48,28 @@ function renderPanel(services: Services, onClose: () => void = jest.fn()) {
 }
 
 describe('ApiKeysPanel', () => {
-  it('renders the keys form with primary api key + save/clear controls', () => {
+  it('renders the keys form with a provider api key + add/save/clear controls', async () => {
     const { services } = makeServices({});
     const { getByTestId } = renderPanel(services);
 
     expect(getByTestId('queryCopilotApiKeysPanel')).toBeTruthy();
-    expect(getByTestId('queryCopilotPrimaryApiKey')).toBeTruthy();
+    // A brand-new user starts with a single blank Anthropic slot.
+    await waitFor(() => expect(getByTestId('queryCopilotanthropicApiKey')).toBeTruthy());
+    expect(getByTestId('queryCopilotAddProviderButton')).toBeTruthy();
     expect(getByTestId('queryCopilotSaveKeysButton')).toBeTruthy();
     expect(getByTestId('queryCopilotClearKeysButton')).toBeTruthy();
   });
 
-  it('renders the masked status line (key set) from the server', async () => {
+  it('renders the masked status line (providers ready) from the server', async () => {
     const masked: MaskedCredentials = {
-      primary: { provider: 'anthropic', model: null, endpoint: null, hasKey: true },
-      fallback: null,
+      providers: [{ provider: 'anthropic', model: null, endpoint: null, hasKey: true }],
+      primaryProvider: 'anthropic',
     };
     const { services } = makeServices({ getCredentials: jest.fn().mockResolvedValue(masked) });
     const { getByTestId } = renderPanel(services);
 
     await waitFor(() =>
-      expect(getByTestId('queryCopilotApiKeysStatus').textContent).toContain('key set')
+      expect(getByTestId('queryCopilotApiKeysStatus').textContent).toContain('provider')
     );
   });
 
@@ -76,13 +78,14 @@ describe('ApiKeysPanel', () => {
     const { services, saveCredentials } = makeServices({});
     const { getByTestId } = renderPanel(services, onClose);
 
-    fireEvent.change(getByTestId('queryCopilotPrimaryApiKey'), { target: { value: 'sk-abc' } });
+    await waitFor(() => expect(getByTestId('queryCopilotanthropicApiKey')).toBeTruthy());
+    fireEvent.change(getByTestId('queryCopilotanthropicApiKey'), { target: { value: 'sk-abc' } });
     fireEvent.click(getByTestId('queryCopilotSaveKeysButton'));
 
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(saveCredentials).toHaveBeenCalledWith({
-      primary: { provider: 'anthropic', apiKey: 'sk-abc' },
-      fallback: null,
+      providers: [{ provider: 'anthropic', apiKey: 'sk-abc' }],
+      primaryProvider: 'anthropic',
     });
   });
 
@@ -91,23 +94,25 @@ describe('ApiKeysPanel', () => {
     const { services, saveCredentials } = makeServices({});
     const { getByTestId } = renderPanel(services, onClose);
 
+    await waitFor(() => expect(getByTestId('queryCopilotanthropicApiKey')).toBeTruthy());
     fireEvent.click(getByTestId('queryCopilotSaveKeysButton'));
 
     await waitFor(() =>
-      expect(getByTestId('queryCopilotApiKeysPanel').textContent).toContain('API key is required')
+      expect(getByTestId('queryCopilotApiKeysPanel').textContent).toContain('needs an API key')
     );
     expect(onClose).not.toHaveBeenCalled();
     expect(saveCredentials).not.toHaveBeenCalled();
   });
 
-  it('hides the api key field and shows an endpoint field when ollama is selected', () => {
+  it('hides the api key field and shows an endpoint field when ollama is selected', async () => {
     const { services } = makeServices({});
     const { getByTestId, queryByTestId } = renderPanel(services);
 
-    fireEvent.change(getByTestId('queryCopilotPrimaryProvider'), { target: { value: 'ollama' } });
+    await waitFor(() => expect(getByTestId('queryCopilotanthropicProvider')).toBeTruthy());
+    fireEvent.change(getByTestId('queryCopilotanthropicProvider'), { target: { value: 'ollama' } });
 
-    expect(queryByTestId('queryCopilotPrimaryApiKey')).toBeNull();
-    expect(getByTestId('queryCopilotPrimaryEndpoint')).toBeTruthy();
+    expect(queryByTestId('queryCopilotollamaApiKey')).toBeNull();
+    expect(getByTestId('queryCopilotollamaEndpoint')).toBeTruthy();
   });
 
   it('saves ollama without an api key (closes + posts)', async () => {
@@ -115,13 +120,14 @@ describe('ApiKeysPanel', () => {
     const { services, saveCredentials } = makeServices({});
     const { getByTestId } = renderPanel(services, onClose);
 
-    fireEvent.change(getByTestId('queryCopilotPrimaryProvider'), { target: { value: 'ollama' } });
+    await waitFor(() => expect(getByTestId('queryCopilotanthropicProvider')).toBeTruthy());
+    fireEvent.change(getByTestId('queryCopilotanthropicProvider'), { target: { value: 'ollama' } });
     fireEvent.click(getByTestId('queryCopilotSaveKeysButton'));
 
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(saveCredentials).toHaveBeenCalledWith({
-      primary: { provider: 'ollama' },
-      fallback: null,
+      providers: [{ provider: 'ollama' }],
+      primaryProvider: 'ollama',
     });
   });
 

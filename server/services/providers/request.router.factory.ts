@@ -20,11 +20,11 @@ import { FixedOrderRoutingStrategy } from './router';
 /**
  * Builds a request-scoped {@link ProviderRouter} from {@link RequestCredentials}.
  *
- * The provider map is built by {@link ProviderFactory.createProviderMap}
- * (primary then fallback, deduped). The routing order is the primary followed
- * by the fallback provider, deduplicated so a same-provider fallback does not
- * appear twice. Health is intentionally not tracked — a {@link NullHealthMonitor}
- * makes every provider read as healthy so the fixed order is honoured exactly.
+ * The provider map is built by {@link ProviderFactory.createProviderMap} from
+ * every entry in `creds.providers` (deduped by provider). The routing order is
+ * that same list, in order, deduplicated so a repeated provider does not appear
+ * twice. Health is intentionally not tracked — a {@link NullHealthMonitor} makes
+ * every provider read as healthy so the fixed order is honoured exactly.
  */
 export function buildRequestRouter(
   creds: RequestCredentials,
@@ -34,10 +34,10 @@ export function buildRequestRouter(
 
   const order: ProviderName[] = [];
   const seen = new Set<ProviderName>();
-  for (const provider of [creds.primary.provider, creds.fallback?.provider]) {
-    if (provider && !seen.has(provider)) {
-      order.push(provider);
-      seen.add(provider);
+  for (const cred of creds.providers) {
+    if (!seen.has(cred.provider)) {
+      order.push(cred.provider);
+      seen.add(cred.provider);
     }
   }
 

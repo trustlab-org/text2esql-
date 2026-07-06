@@ -4,8 +4,8 @@ import type { HttpSetup } from '@kbn/core/public';
 import type { MaskedCredentials, SaveCredentialsInput } from '../../common/types';
 
 const MASKED: MaskedCredentials = {
-  primary: { provider: 'anthropic', model: null, endpoint: null, hasKey: true },
-  fallback: null,
+  providers: [{ provider: 'anthropic', model: null, endpoint: null, hasKey: true }],
+  primaryProvider: 'anthropic',
 };
 
 describe('CredentialsApiService', () => {
@@ -31,8 +31,8 @@ describe('CredentialsApiService', () => {
     };
     const svc = new CredentialsApiService(http as unknown as HttpSetup);
     const input: SaveCredentialsInput = {
-      primary: { provider: 'anthropic', apiKey: 'sk-x' },
-      fallback: null,
+      providers: [{ provider: 'anthropic', apiKey: 'sk-x' }],
+      primaryProvider: 'anthropic',
     };
 
     const res = await svc.saveCredentials(input);

@@ -24,9 +24,9 @@ import { providerDisplayName } from '../statusbar/provider_display';
 import { useProviderModels } from '../../hooks/useProviderModels';
 
 /**
- * One provider slot's settings card (used for both the Primary and Fallback
- * slots): provider select + live connection-status badge, per-provider info
- * line, API key (or Ollama endpoint) input, a dynamically-discovered model
+ * One provider slot's settings card in the credentials list: provider select +
+ * live connection-status badge, "set as primary"/remove controls, a per-provider
+ * info line, API key (or Ollama endpoint) input, a dynamically-discovered model
  * dropdown with a refresh button, and a "Test connection" action.
  *
  * Models are NEVER hardcoded — the dropdown is populated live from the server's
@@ -45,19 +45,21 @@ export interface ProviderSectionState {
 }
 
 export interface ProviderCardProps {
-  readonly slotLabel: 'Primary' | 'Fallback';
   readonly section: ProviderSectionState;
   readonly onChange: (section: ProviderSectionState) => void;
   /** Whether the server already stores a key for this slot's provider. */
   readonly hasStoredKey: boolean;
-  /** data-test-subj prefix segment, e.g. 'Primary' -> queryCopilotPrimaryModel. */
+  /** data-test-subj prefix segment, e.g. 'anthropic' -> queryCopilotanthropicModel. */
   readonly keyPrefix: string;
+  /** Provider names taken by OTHER cards — disabled in the provider select. */
+  readonly unavailableProviders?: readonly ProviderName[];
+  /** Whether this slot is the default primary provider. */
+  readonly isPrimary: boolean;
+  /** Marks this slot as the default primary provider. */
+  readonly onMakePrimary: () => void;
+  /** Removes this slot from the list. */
+  readonly onRemove: () => void;
 }
-
-const PROVIDER_OPTIONS: EuiSelectOption[] = ALL_PROVIDER_NAMES.map((name) => ({
-  value: name,
-  text: providerDisplayName(name as ProviderName),
-}));
 
 /** Short static per-provider description + key requirement (no model names). */
 const PROVIDER_INFO: Record<ProviderName, string> = {
@@ -76,13 +78,24 @@ interface ModelOption {
 }
 
 export const ProviderCard: React.FC<ProviderCardProps> = ({
-  slotLabel,
   section,
   onChange,
   hasStoredKey,
   keyPrefix,
+  unavailableProviders = [],
+  isPrimary,
+  onMakePrimary,
+  onRemove,
 }) => {
   const { models, status, error, discover, reset } = useProviderModels();
+
+  // Provider options: those already taken by OTHER cards are disabled so the
+  // list never holds duplicate providers.
+  const providerOptions: EuiSelectOption[] = ALL_PROVIDER_NAMES.map((name) => ({
+    value: name,
+    text: providerDisplayName(name as ProviderName),
+    disabled: name !== section.provider && unavailableProviders.includes(name as ProviderName),
+  }));
 
   const isOllama = section.provider === PROVIDER_NAMES.OLLAMA;
   const typedKey = section.apiKey.trim();
@@ -214,9 +227,9 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
       <EuiPanel hasBorder paddingSize="m" data-test-subj={`queryCopilot${keyPrefix}ProviderCard`}>
         <EuiFlexGroup gutterSize="s" alignItems="flexEnd" responsive={false}>
           <EuiFlexItem>
-            <EuiFormRow label={`${slotLabel} provider`} fullWidth>
+            <EuiFormRow label="Provider" fullWidth>
               <EuiSelect
-                options={PROVIDER_OPTIONS}
+                options={providerOptions}
                 value={section.provider}
                 onChange={(e) => handleProviderChange(e.target.value as ProviderName)}
                 fullWidth
@@ -225,6 +238,30 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
             </EuiFormRow>
           </EuiFlexItem>
           <EuiFlexItem grow={false}>{connectionBadge()}</EuiFlexItem>
+          <EuiFlexItem grow={false}>
+            {isPrimary ? (
+              <EuiBadge color="primary" data-test-subj={`queryCopilot${keyPrefix}PrimaryBadge`}>
+                Primary
+              </EuiBadge>
+            ) : (
+              <EuiButtonEmpty
+                size="s"
+                onClick={onMakePrimary}
+                data-test-subj={`queryCopilot${keyPrefix}SetPrimary`}
+              >
+                Set as primary
+              </EuiButtonEmpty>
+            )}
+          </EuiFlexItem>
+          <EuiFlexItem grow={false}>
+            <EuiButtonIcon
+              iconType="trash"
+              color="danger"
+              aria-label={`Remove ${providerDisplayName(section.provider)} provider`}
+              onClick={onRemove}
+              data-test-subj={`queryCopilot${keyPrefix}Remove`}
+            />
+          </EuiFlexItem>
         </EuiFlexGroup>
 
         <EuiSpacer size="xs" />
