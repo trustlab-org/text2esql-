@@ -22,20 +22,20 @@ import { setSelectedDataViews } from '../../store/copilot.actions';
  * are missing from the loaded list (stale selections) still render as chips so
  * they stay visible and removable. Power users can also type an ad-hoc pattern
  * (comma lists allowed by ES) as a custom option, subject to the same
- * validation the server applies (no ":" and no leading-dot segments).
+ * validation the server applies (no ":"; dot-prefixed patterns are allowed).
  */
 
 /**
- * Validates an ad-hoc pattern typed by the user: trimmed, non-empty, no ":"
- * anywhere, and no comma-separated segment starting with ".".
+ * Validates an ad-hoc pattern typed by the user: trimmed, non-empty, and no ":"
+ * anywhere. Dot-prefixed patterns (e.g. `.alerts-security*`) ARE allowed to
+ * match the server guard — they are legitimate targets and Elasticsearch RBAC
+ * still governs what the analyst can actually read.
  */
 function isValidCustomPattern(pattern: string): boolean {
   if (pattern.length === 0 || pattern.includes(':')) {
     return false;
   }
-  return pattern
-    .split(',')
-    .every((segment) => segment.trim().length > 0 && !segment.trim().startsWith('.'));
+  return pattern.split(',').every((segment) => segment.trim().length > 0);
 }
 
 export const DataViewSelector: React.FC = () => {

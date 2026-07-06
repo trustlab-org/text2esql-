@@ -8,16 +8,16 @@ import { PLUGIN_ROUTE_PREFIX, QUERY_LANGUAGES, MAX_INDEX_PATTERN_LENGTH } from '
 
 /** Request body for POST /execute. */
 /**
- * Rejects cross-cluster (`:`) and system-index (leading `.`) targets while
- * staying permissive for normal patterns like `fosstlsoc-logs-*`. Applies to
- * both the KQL and ES|QL paths. Closes audit finding F3.
+ * Rejects cross-cluster (`:`) targets. Dot-prefixed indices (e.g.
+ * `.alerts-security*`, `.items-*`) ARE permitted: they are legitimate targets
+ * for a security-investigation tool and correspond to real Kibana Data Views
+ * the analyst selected in Discover. Access is still governed by Elasticsearch
+ * RBAC (the executor runs `asCurrentUser`), so a user can only read indices
+ * their own role already grants — the executor never widens privileges.
  */
 const validateIndexPattern = (value: string): string | undefined => {
   if (value.includes(':')) {
     return 'cross-cluster index patterns (":") are not allowed';
-  }
-  if (value.split(',').some((part) => part.trim().startsWith('.'))) {
-    return 'system-index patterns (leading ".") are not allowed';
   }
   return undefined;
 };
