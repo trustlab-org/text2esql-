@@ -87,6 +87,13 @@ export interface QueryGenerationRequest {
   readonly preferredProvider?: ProviderName;
   /** Optional request id; one is generated when absent. */
   readonly requestId?: string;
+  /**
+   * When true, the pipeline neither reads nor writes the result cache. Used by
+   * the benchmark runner: the cache key is provider-agnostic (query + index), so
+   * without this the FIRST provider's result would be served to every other
+   * provider on the same case — making a cross-provider comparison meaningless.
+   */
+  readonly bypassCache?: boolean;
 }
 
 /**
@@ -192,7 +199,10 @@ export class QueryPipeline {
       // Index-scoped, collision-resistant cache key (query hash + index pattern).
       const cacheKey = this.cacheKeyBuilder.buildKey(normalized.cacheKey, request.indexPattern);
       const tCacheGet = Date.now();
-      const cached = await this.cache.get(cacheKey);
+      // Benchmark runs bypass the cache so every provider actually calls its own
+      // API (the key is provider-agnostic, so a cache hit would return whichever
+      // provider ran first — see QueryGenerationRequest.bypassCache).
+      const cached = request.bypassCache ? null : await this.cache.get(cacheKey);
       if (cached) {
         ctx.cacheHit = true;
         this.logger.logCacheEvent(requestId, true, cacheKey);
@@ -493,7 +503,9 @@ export class QueryPipeline {
       };
 
       // ── 12. Cache write (successful results only) ─────────────────────
-      if (status !== 'failed') {
+      // Skipped for benchmark runs so one provider's result never pollutes the
+      // provider-agnostic cache key for the others.
+      if (status !== 'failed' && !request.bypassCache) {
         const tCacheSet = Date.now();
         await this.cache.set(cacheKey, result);
         ctx.addStage({ stage: 'cache_write', durationMs: Date.now() - tCacheSet, success: true });
@@ -742,7 +754,7 @@ export class QueryPipeline {
 
   /**
    * Defensively extracts the `kql` string from an LLM response. The model is
-   * asked for a JSON object `{ kql, ... }`, but responses may be wrapped in
+   * asked for a JSON object with a `kql` field, but responses may be wrapped in
    * Markdown code fences or include surrounding prose; if no JSON object with a
    * string `kql` can be recovered, the stripped content is returned as-is.
    */
@@ -772,15 +784,15 @@ export class QueryPipeline {
     return QUERY_LANGUAGES.KQL;
   }
 
-  /** Removes a leading ```/```json fence and a trailing ``` fence, then trims. */
+  /** Removes a leading json code fence and a trailing code fence, then trims. */
   private stripCodeFences(text: string): string {
     return text
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```$/i, '')
+      .replace(/^`{3}(?:json)?\s*/i, '')
+      .replace(/\s*`{3}$/i, '')
       .trim();
   }
 
-  /** Returns the substring from the first `{` to the last `}` (inclusive), else `''`. */
+  /** Returns the substring from the first brace to the last brace (inclusive), else empty. */
   private extractFirstJsonObject(text: string): string {
     const first = text.indexOf('{');
     const last = text.lastIndexOf('}');

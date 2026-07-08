@@ -137,6 +137,10 @@ export class BenchmarkRunner {
         sessionId: `benchmark-${provider}`,
         preferredProvider: provider,
         requestId: randomUUID(),
+        // Bypass the (provider-agnostic) cache so every provider genuinely calls
+        // its own API — otherwise the first provider's cached result is served to
+        // all the others, producing identical latency/tokens/cost/quality.
+        bypassCache: true,
       };
 
       const result = await this.pipeline.execute(request);
