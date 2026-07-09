@@ -22,6 +22,13 @@ export interface OpenAIConfig {
   readonly organization?: string;
   /** Optional OpenAI project ID. */
   readonly project?: string;
+  /**
+   * Optional custom base URL for OpenAI-COMPATIBLE servers (vLLM, TGI, LocalAI,
+   * LM Studio, …). When set, the SDK targets this instead of
+   * https://api.openai.com/v1. Include the /v1 suffix, e.g.
+   * "http://10.129.7.88:8102/v1". Undefined → the SDK's api.openai.com default.
+   */
+  readonly baseURL?: string;
 }
 
 export const OPENAI_DEFAULTS = {

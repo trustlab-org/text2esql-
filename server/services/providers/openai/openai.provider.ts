@@ -70,6 +70,7 @@ export class OpenAIProvider extends BaseProvider {
       apiKey: config.apiKey,
       maxRetries: 0, // BaseProvider.retry() owns retries
       timeout: config.timeoutMs, // belt-and-suspenders alongside withTimeout()
+      ...(config.baseURL !== undefined && { baseURL: config.baseURL }),
       ...(config.organization !== undefined && { organization: config.organization }),
       ...(config.project !== undefined && { project: config.project }),
     });

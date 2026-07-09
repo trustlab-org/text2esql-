@@ -107,6 +107,9 @@ export class ProviderFactory {
           maxTokens: 8192,
           timeoutMs: 60_000,
           temperature: 0.2,
+          // Honour a custom endpoint so OpenAI-compatible servers (vLLM/TGI/…)
+          // can be targeted. Undefined → the SDK's default api.openai.com.
+          ...(cred.endpoint ? { baseURL: cred.endpoint } : {}),
         };
         return new OpenAIProvider(cfg);
       }

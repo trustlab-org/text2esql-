@@ -80,7 +80,7 @@ export class ModelDiscoveryService {
 
     switch (cred.provider) {
       case PROVIDER_NAMES.OPENAI:
-        models = await this.discoverOpenAI(cred.apiKey);
+        models = await this.discoverOpenAI(cred.apiKey, cred.endpoint);
         break;
       case PROVIDER_NAMES.ANTHROPIC:
         models = await this.discoverAnthropic(cred.apiKey);
@@ -105,11 +105,19 @@ export class ModelDiscoveryService {
   // Per-provider discovery
   // ---------------------------------------------------------------------------
 
-  /** OpenAI: SDK models.list(), excluding obviously non-chat model ids. */
-  private async discoverOpenAI(apiKey?: string): Promise<DiscoveredModel[]> {
+  /**
+   * OpenAI: SDK models.list(), excluding obviously non-chat model ids.
+   * `endpoint` targets an OpenAI-COMPATIBLE server (vLLM/TGI/…) via baseURL;
+   * undefined → the SDK's api.openai.com default.
+   */
+  private async discoverOpenAI(apiKey?: string, endpoint?: string): Promise<DiscoveredModel[]> {
     this.assertKey(apiKey);
     try {
-      const client = new OpenAI({ apiKey, timeout: DISCOVERY_TIMEOUT_MS });
+      const client = new OpenAI({
+        apiKey,
+        timeout: DISCOVERY_TIMEOUT_MS,
+        ...(endpoint ? { baseURL: endpoint } : {}),
+      });
       const models: DiscoveredModel[] = [];
       for await (const model of client.models.list()) {
         const id = model.id;

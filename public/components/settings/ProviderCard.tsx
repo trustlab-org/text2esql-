@@ -67,7 +67,9 @@ export interface ProviderCardProps {
 
 /** Short static per-provider description + key requirement (no model names). */
 const PROVIDER_INFO: Record<ProviderName, string> = {
-  openai: 'OpenAI API — requires an API key from platform.openai.com',
+  openai:
+    'OpenAI API — requires an API key. Set a custom endpoint to target an ' +
+    'OpenAI-compatible server (vLLM, TGI, LocalAI, LM Studio).',
   anthropic: 'Anthropic Claude API — requires an API key from console.anthropic.com',
   gemini: 'Google Gemini API — requires an API key from aistudio.google.com',
   groq: 'Groq API — requires an API key from console.groq.com',
@@ -104,6 +106,11 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
   }));
 
   const isOllama = section.provider === PROVIDER_NAMES.OLLAMA;
+  // OpenAI-compatible servers (vLLM / TGI / LocalAI / LM Studio) are reached
+  // through the OpenAI provider with a custom base URL, so that card also
+  // exposes an endpoint field (in addition to its API key).
+  const supportsCustomEndpoint = section.provider === PROVIDER_NAMES.OPENAI;
+  const usesEndpoint = isOllama || supportsCustomEndpoint;
   const typedKey = section.apiKey.trim();
 
   // The key text used for the LAST discovery, so a blur with DIFFERENT text
@@ -121,11 +128,11 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
       return discover({
         provider: section.provider,
         apiKey: key.length > 0 ? key : undefined,
-        endpoint: isOllama && endpoint.length > 0 ? endpoint : undefined,
+        endpoint: usesEndpoint && endpoint.length > 0 ? endpoint : undefined,
         forceRefresh,
       });
     },
-    [discover, section.provider, section.apiKey, section.endpoint, isOllama]
+    [discover, section.provider, section.apiKey, section.endpoint, usesEndpoint]
   );
 
   // Auto-discovery: on mount with a stored key, and on provider change with a
@@ -165,9 +172,11 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     }
   };
 
-  /** Endpoint blur (Ollama): re-discover so the list tracks the new server. */
+  /** Endpoint blur (Ollama or OpenAI-compatible): re-discover so the model list
+   *  tracks the new server. The discovery cache is keyed on the endpoint, so a
+   *  changed endpoint naturally misses the cache and re-fetches. */
   const handleEndpointBlur = (): void => {
-    if (isOllama) {
+    if (usesEndpoint) {
       void runDiscover(false);
     }
   };
@@ -307,24 +316,45 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
             />
           </EuiFormRow>
         ) : (
-          <EuiFormRow
-            label="API key"
-            helpText={
-              hasStoredKey
-                ? 'A key is stored for this provider. Leave blank to keep the stored key.'
-                : 'Leave blank to keep your existing key. Keys are stored encrypted on the server.'
-            }
-            fullWidth
-          >
-            <EuiFieldPassword
-              type="dual"
-              value={section.apiKey}
-              onChange={(e) => onChange({ ...section, apiKey: e.target.value })}
-              onBlur={handleApiKeyBlur}
+          <>
+            <EuiFormRow
+              label="API key"
+              helpText={
+                hasStoredKey
+                  ? 'A key is stored for this provider. Leave blank to keep the stored key.'
+                  : 'Leave blank to keep your existing key. Keys are stored encrypted on the server.'
+              }
               fullWidth
-              data-test-subj={`queryCopilot${keyPrefix}ApiKey`}
-            />
-          </EuiFormRow>
+            >
+              <EuiFieldPassword
+                type="dual"
+                value={section.apiKey}
+                onChange={(e) => onChange({ ...section, apiKey: e.target.value })}
+                onBlur={handleApiKeyBlur}
+                fullWidth
+                data-test-subj={`queryCopilot${keyPrefix}ApiKey`}
+              />
+            </EuiFormRow>
+            {supportsCustomEndpoint && (
+              <>
+                <EuiSpacer size="s" />
+                <EuiFormRow
+                  label="Endpoint"
+                  helpText="Optional — set only for an OpenAI-compatible server (vLLM, TGI, LocalAI, LM Studio). Include the /v1 suffix. Leave blank to use api.openai.com."
+                  fullWidth
+                >
+                  <EuiFieldText
+                    placeholder="https://api.openai.com/v1"
+                    value={section.endpoint}
+                    onChange={(e) => onChange({ ...section, endpoint: e.target.value })}
+                    onBlur={handleEndpointBlur}
+                    fullWidth
+                    data-test-subj={`queryCopilot${keyPrefix}Endpoint`}
+                  />
+                </EuiFormRow>
+              </>
+            )}
+          </>
         )}
 
         <EuiFormRow
