@@ -26,7 +26,7 @@ export const AnalystMessage: React.FC<AnalystMessageProps> = ({ message }) => {
     borderRadius: euiTheme.border.radius.medium,
     maxWidth: '80%',
     whiteSpace: 'pre-wrap',
-    overflowWrap: 'anywhere',
+    overflowWrap: 'break-word',
   });
 
   return (
